@@ -6,7 +6,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for Playwright/Chromium
+# Install system dependencies for Playwright/Chromium and WebGL2
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -30,6 +30,10 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    libegl1-mesa \
+    libgles2-mesa \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements

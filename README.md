@@ -69,7 +69,8 @@ Playtester is designed as an extensible foundation for automated game testing re
 
 - **`BrowserEnv`**: Clean abstraction over Playwright
   - Headful/headless Chromium
-  - WebGL support (SwiftShader software rendering)
+  - Full WebGL2 support (ANGLE + SwiftShader)
+  - Works with Godot, Unity, Three.js games
   - Console event capture
   - Screenshot capture
   - Atomic action execution
@@ -279,6 +280,43 @@ playtester --config examples/monopoly_gemini_config.json
 
 **See `examples/gemini_usage.md` for detailed guide.**
 
+### WebGL/WebGL2 Support
+
+The playtester has **full WebGL2 support** for modern web games:
+
+**Supported Engines:**
+- ✅ Godot Engine (WebGL2)
+- ✅ Unity WebGL (WebGL1/2)
+- ✅ Three.js
+- ✅ Babylon.js
+- ✅ Custom WebGL/WebGL2 games
+
+**Configuration:**
+- Uses ANGLE (Almost Native Graphics Layer) for best compatibility
+- SwiftShader software rendering (no GPU required)
+- Works in headless mode and Docker
+- Proper WebGL2 context initialization
+
+**Testing Godot Games:**
+```bash
+playtester --url https://your-godot-game.com \
+    --steps 100 \
+    --controller vlm \
+    --vlm-provider gemini \
+    --game-name "My Godot Game"
+```
+
+**Common Issues:**
+
+If you see "WebGL2 not supported" errors, ensure you're using the latest version:
+
+```bash
+git pull
+pip install -e .
+```
+
+**See `docs/WEBGL_SUPPORT.md` for detailed troubleshooting and configuration.**
+
 ### Output Structure
 
 ```
@@ -351,9 +389,11 @@ trajectory_logger.finalize()
 
 ✅ **Browser Integration**
 - Playwright-based environment
-- WebGL support
+- Full WebGL2 support (ANGLE + SwiftShader)
+- Compatible with Godot, Unity, Three.js
 - Headful/headless modes
 - Configurable viewport
+- Software rendering (works without GPU)
 
 ✅ **Controllers**
 - Base controller interface

@@ -82,13 +82,30 @@ class BrowserEnv:
         logger.info(f"Starting browser and navigating to: {url}")
 
         self._playwright = sync_playwright().start()
+
+        # Configure browser args for WebGL/WebGL2 support
+        browser_args = [
+            '--enable-webgl',
+            '--enable-webgl2',
+            '--use-gl=angle',  # ANGLE for better WebGL2 support
+            '--use-angle=swiftshader',  # SwiftShader backend for ANGLE
+            '--enable-features=WebGL2ComputeContext',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-gpu-vsync',  # Prevent vsync issues
+            '--enable-unsafe-webgpu',  # Enable WebGPU features
+        ]
+
+        # Add headless-specific args for better WebGL support
+        if self.headless:
+            browser_args.extend([
+                '--disable-gpu',  # Disable GPU in headless (use software)
+                '--disable-dev-shm-usage',  # Avoid shared memory issues
+                '--no-sandbox',  # Required for some headless environments
+            ])
+
         self._browser = self._playwright.chromium.launch(
             headless=self.headless,
-            args=[
-                '--enable-webgl',
-                '--use-gl=swiftshader',  # Software rendering for WebGL
-                '--disable-blink-features=AutomationControlled'
-            ]
+            args=browser_args
         )
 
         self._context = self._browser.new_context(
