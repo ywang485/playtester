@@ -5,10 +5,11 @@ Provides a command-line interface for running playtest sessions.
 """
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from .browser.env import BrowserEnv
 from .controller import RandomController, VLMAdvisedController
@@ -34,7 +35,8 @@ def run_playtest(
     seed: Optional[int] = None,
     headless: bool = False,
     viewport_width: int = 1280,
-    viewport_height: int = 720
+    viewport_height: int = 720,
+    game_context: Optional[Dict[str, Any]] = None
 ) -> None:
     """
     Run a single playtest session.
@@ -53,6 +55,7 @@ def run_playtest(
         headless: Run browser in headless mode
         viewport_width: Browser viewport width
         viewport_height: Browser viewport height
+        game_context: Optional game context (goal, controls, known bugs, etc.)
     """
     logger.info("="*80)
     logger.info(f"Starting playtest session")
@@ -61,24 +64,33 @@ def run_playtest(
     logger.info(f"Controller: {controller_type}")
     logger.info(f"Seed: {seed}")
     logger.info(f"Output: {output_dir}")
+    if game_context:
+        logger.info(f"Game context: {game_context.get('name', 'N/A')}")
+        if game_context.get('goal'):
+            logger.info(f"  Goal: {game_context['goal']}")
     logger.info("="*80)
 
     # Initialize trajectory logger
-    trajectory_logger = TrajectoryLogger(output_dir)
-    trajectory_logger.initialize({
+    metadata = {
         "url": url,
         "steps": steps,
         "controller_type": controller_type,
         "seed": seed,
         "viewport": {"width": viewport_width, "height": viewport_height}
-    })
+    }
+    if game_context:
+        metadata["game_context"] = game_context
+
+    trajectory_logger = TrajectoryLogger(output_dir)
+    trajectory_logger.initialize(metadata)
 
     # Initialize controller
     controller = create_controller(
         controller_type=controller_type,
         seed=seed,
         viewport_width=viewport_width,
-        viewport_height=viewport_height
+        viewport_height=viewport_height,
+        game_context=game_context
     )
 
     # Initialize browser environment
@@ -144,7 +156,8 @@ def create_controller(
     controller_type: str,
     seed: Optional[int],
     viewport_width: int,
-    viewport_height: int
+    viewport_height: int,
+    game_context: Optional[Dict[str, Any]] = None
 ) -> Controller:
     """
     Factory function to create controllers.
@@ -154,6 +167,7 @@ def create_controller(
         seed: Random seed
         viewport_width: Browser viewport width
         viewport_height: Browser viewport height
+        game_context: Optional game context for VLM
 
     Returns:
         Controller instance
@@ -169,7 +183,8 @@ def create_controller(
         )
     elif controller_type == "vlm":
         # For MVP, use stub VLM client
-        vlm_client = StubVLMClient()
+        # In production, replace with real VLM client that uses game_context
+        vlm_client = StubVLMClient(game_context=game_context)
         return VLMAdvisedController(
             seed=seed,
             vlm_client=vlm_client,
@@ -178,6 +193,58 @@ def create_controller(
         )
     else:
         raise ValueError(f"Unknown controller type: {controller_type}")
+
+
+def load_config(config_path: Path) -> Dict[str, Any]:
+    """
+    Load configuration from a JSON file.
+
+    Args:
+        config_path: Path to JSON config file
+
+    Returns:
+        Configuration dictionary
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        json.JSONDecodeError: If config file is invalid JSON
+    """
+    logger.info(f"Loading config from: {config_path}")
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return config
+
+
+def build_game_context(
+    name: Optional[str] = None,
+    goal: Optional[str] = None,
+    controls: Optional[str] = None,
+    known_bugs: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Build game context dictionary from individual arguments.
+
+    Args:
+        name: Game name
+        goal: Game goal description
+        controls: Controls description
+        known_bugs: Comma-separated list of known bugs
+
+    Returns:
+        Game context dictionary, or None if no context provided
+    """
+    context = {}
+
+    if name:
+        context["name"] = name
+    if goal:
+        context["goal"] = goal
+    if controls:
+        context["controls"] = controls
+    if known_bugs:
+        context["known_bugs"] = [bug.strip() for bug in known_bugs.split(",")]
+
+    return context if context else None
 
 
 def main():
@@ -249,23 +316,90 @@ def main():
         help="Enable verbose logging"
     )
 
+    # Game context arguments
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Path to JSON config file with game context and settings"
+    )
+
+    parser.add_argument(
+        "--game-name",
+        type=str,
+        help="Name of the game (for logging and VLM context)"
+    )
+
+    parser.add_argument(
+        "--game-goal",
+        type=str,
+        help="Description of the game goal (for VLM context)"
+    )
+
+    parser.add_argument(
+        "--game-controls",
+        type=str,
+        help="Description of game controls (for VLM context)"
+    )
+
+    parser.add_argument(
+        "--known-bugs",
+        type=str,
+        help="Comma-separated list of known bug areas to monitor"
+    )
+
     args = parser.parse_args()
 
     # Configure logging level
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Load config file if provided
+    config = {}
+    if args.config:
+        try:
+            config = load_config(args.config)
+        except Exception as e:
+            logger.error(f"Failed to load config file: {e}")
+            sys.exit(1)
+
+    # CLI arguments override config file
+    # Extract playtest settings
+    url = args.url if args.url != parser.get_default('url') else config.get('url', args.url)
+    steps = args.steps if args.steps != parser.get_default('steps') else config.get('steps', args.steps)
+    output_dir = args.output_dir if args.output_dir != parser.get_default('output_dir') else Path(config.get('output_dir', args.output_dir))
+    controller_type = args.controller if args.controller != parser.get_default('controller') else config.get('controller', args.controller)
+    seed = args.seed if args.seed is not None else config.get('seed')
+    headless = args.headless if args.headless else config.get('headless', False)
+    viewport_width = args.viewport_width if args.viewport_width != parser.get_default('viewport_width') else config.get('viewport_width', args.viewport_width)
+    viewport_height = args.viewport_height if args.viewport_height != parser.get_default('viewport_height') else config.get('viewport_height', args.viewport_height)
+
+    # Build game context from CLI args
+    cli_game_context = build_game_context(
+        name=args.game_name,
+        goal=args.game_goal,
+        controls=args.game_controls,
+        known_bugs=args.known_bugs
+    )
+
+    # Merge game context: CLI args override config file
+    game_context = config.get('game_context', {})
+    if cli_game_context:
+        game_context.update(cli_game_context)
+
+    game_context = game_context if game_context else None
+
     # Run playtest
     try:
         run_playtest(
-            url=args.url,
-            steps=args.steps,
-            output_dir=args.output_dir,
-            controller_type=args.controller,
-            seed=args.seed,
-            headless=args.headless,
-            viewport_width=args.viewport_width,
-            viewport_height=args.viewport_height
+            url=url,
+            steps=steps,
+            output_dir=output_dir,
+            controller_type=controller_type,
+            seed=seed,
+            headless=headless,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            game_context=game_context
         )
     except KeyboardInterrupt:
         logger.info("Interrupted by user")

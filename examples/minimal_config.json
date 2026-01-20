@@ -1,0 +1,9 @@
+{
+  "url": "https://example.com/game",
+  "steps": 50,
+  "controller": "random",
+  "game_context": {
+    "name": "Example Game",
+    "goal": "Complete the level"
+  }
+}

@@ -10,7 +10,7 @@ integrate real VLM APIs (GPT-4V, Claude, Gemini, etc.).
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Dict, Any
 import logging
 
 from ..core.observation import Observation
@@ -42,6 +42,21 @@ class VLMClient(ABC):
     - Error handling and retries
     - Cost tracking
     """
+
+    def __init__(self, game_context: Optional[Dict[str, Any]] = None):
+        """
+        Initialize VLM client.
+
+        Args:
+            game_context: Optional game context including:
+                - name: Game name
+                - goal: Game goal description
+                - controls: Controls description
+                - known_bugs: List of known bugs to watch for
+                - Any other game-specific metadata
+        """
+        self.game_context = game_context or {}
+        logger.debug(f"VLMClient initialized with context: {self.game_context.keys()}")
 
     @abstractmethod
     def suggest_action(self, observation: Observation) -> Optional[Action]:
@@ -92,12 +107,23 @@ class StubVLMClient(VLMClient):
     Replace this with a real implementation when ready to integrate VLMs.
     """
 
-    def __init__(self):
-        """Initialize stub VLM client."""
+    def __init__(self, game_context: Optional[Dict[str, Any]] = None):
+        """
+        Initialize stub VLM client.
+
+        Args:
+            game_context: Optional game context (logged but not used in stub)
+        """
+        super().__init__(game_context)
         logger.warning(
             "Using StubVLMClient - no real VLM integration. "
             "All suggestions will be placeholder values."
         )
+        if self.game_context:
+            logger.info(
+                f"Game context provided but unused in stub: "
+                f"{self.game_context.get('name', 'unnamed game')}"
+            )
 
     def suggest_action(self, observation: Observation) -> Optional[Action]:
         """
@@ -115,11 +141,15 @@ class StubVLMClient(VLMClient):
         logger.debug(f"StubVLMClient: returning stub action for step {observation.step}")
 
         # In a real implementation, this would:
-        # 1. Encode the screenshot from observation.screenshot_path
-        # 2. Send to VLM API with appropriate prompt
-        # 3. Parse the VLM's response into an Action
-        # 4. Validate the action is legal
-        # 5. Return the action or None if invalid
+        # 1. Build a prompt using self.game_context:
+        #    - Game goal: self.game_context.get('goal')
+        #    - Controls: self.game_context.get('controls')
+        #    - Known bugs: self.game_context.get('known_bugs')
+        # 2. Encode the screenshot from observation.screenshot_path
+        # 3. Send to VLM API with context-aware prompt
+        # 4. Parse the VLM's response into an Action
+        # 5. Validate the action is legal
+        # 6. Return the action or None if invalid
 
         # For now, return a safe default
         return WaitAction(duration_ms=1000)
@@ -151,17 +181,47 @@ class StubVLMClient(VLMClient):
 # Example of how a real VLM client might look (NOT IMPLEMENTED):
 #
 # class GPT4VisionClient(VLMClient):
-#     """Client for OpenAI GPT-4 Vision API."""
+#     """Client for OpenAI GPT-4 Vision API with game context support."""
 #
-#     def __init__(self, api_key: str, prompt_template: str):
+#     def __init__(self, api_key: str, game_context: Optional[Dict[str, Any]] = None):
+#         super().__init__(game_context)
 #         self.api_key = api_key
-#         self.prompt_template = prompt_template
 #         self.client = openai.Client(api_key=api_key)
+#
+#     def _build_prompt(self) -> str:
+#         """Build context-aware prompt from game_context."""
+#         base_prompt = "You are playtesting a web-based game. "
+#
+#         if self.game_context.get('name'):
+#             base_prompt += f"The game is: {self.game_context['name']}. "
+#
+#         if self.game_context.get('goal'):
+#             base_prompt += f"\n\nGoal: {self.game_context['goal']}"
+#
+#         if self.game_context.get('controls'):
+#             base_prompt += f"\n\nControls: {self.game_context['controls']}"
+#
+#         if self.game_context.get('known_bugs'):
+#             base_prompt += "\n\nKnown issues to watch for:"
+#             for bug in self.game_context['known_bugs']:
+#                 base_prompt += f"\n- {bug}"
+#
+#         base_prompt += (
+#             "\n\nBased on the screenshot, suggest the next action. "
+#             "Respond with JSON: {\"type\": \"click\", \"x\": 100, \"y\": 200} "
+#             "or {\"type\": \"keypress\", \"key\": \"Space\"} "
+#             "or {\"type\": \"wait\", \"duration_ms\": 1000}"
+#         )
+#
+#         return base_prompt
 #
 #     def suggest_action(self, observation: Observation) -> Optional[Action]:
 #         # Encode screenshot
 #         with open(observation.screenshot_path, 'rb') as f:
 #             image_data = base64.b64encode(f.read()).decode()
+#
+#         # Build context-aware prompt
+#         prompt = self._build_prompt()
 #
 #         # Query GPT-4V
 #         response = self.client.chat.completions.create(
@@ -169,7 +229,7 @@ class StubVLMClient(VLMClient):
 #             messages=[{
 #                 "role": "user",
 #                 "content": [
-#                     {"type": "text", "text": self.prompt_template},
+#                     {"type": "text", "text": prompt},
 #                     {"type": "image_url", "image_url": f"data:image/png;base64,{image_data}"}
 #                 ]
 #             }]

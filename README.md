@@ -159,6 +159,7 @@ playtester --url https://example.com/game --steps 20 --verbose
 
 ### CLI Arguments
 
+**Core Arguments:**
 - `--url`: URL of WebGL game to test (required)
 - `--steps`: Number of steps to run (default: 50)
 - `--output-dir`: Directory for output artifacts (default: ./output)
@@ -168,6 +169,73 @@ playtester --url https://example.com/game --steps 20 --verbose
 - `--viewport-width`: Browser viewport width (default: 1280)
 - `--viewport-height`: Browser viewport height (default: 720)
 - `--verbose`: Enable verbose logging
+
+**Game Context Arguments:**
+- `--config`: Path to JSON config file with game context and settings
+- `--game-name`: Name of the game (for logging and VLM context)
+- `--game-goal`: Description of the game goal (for VLM context)
+- `--game-controls`: Description of game controls (for VLM context)
+- `--known-bugs`: Comma-separated list of known bug areas to monitor
+
+### Using Config Files
+
+For complex setups or reusable configurations, use JSON config files:
+
+```bash
+# Run with config file
+playtester --config examples/monopoly_config.json
+
+# Override specific settings
+playtester --config examples/monopoly_config.json --steps 200 --seed 123
+```
+
+**Config file format:**
+
+```json
+{
+  "url": "https://example.com/game",
+  "steps": 100,
+  "controller": "vlm",
+  "seed": 42,
+  "game_context": {
+    "name": "My Game",
+    "goal": "Complete all levels",
+    "controls": {
+      "click": "Interact with objects",
+      "keys": "Arrow keys to move, Space to jump"
+    },
+    "known_bugs": [
+      "UI freeze on level 3",
+      "Score not saving"
+    ]
+  }
+}
+```
+
+See `examples/` directory for more examples.
+
+### Using Game Context
+
+Game context helps the VLM make informed decisions:
+
+```bash
+# Provide context via CLI
+playtester --url https://game.example.com \
+    --controller vlm \
+    --game-name "Platformer" \
+    --game-goal "Reach the exit door in each level" \
+    --game-controls "Arrow keys move, Space jumps, Click interacts" \
+    --known-bugs "Level 3 door may not open, Fall detection inconsistent"
+
+# Or via config file (recommended for complex games)
+playtester --config my_game_config.json
+```
+
+The VLM will use this context to:
+- Understand the game objective
+- Know which controls are available
+- Watch for specific known issues
+- Make more informed action decisions
 
 ### Output Structure
 
@@ -260,6 +328,13 @@ trajectory_logger.finalize()
 - CLI interface
 - Docker support
 - Configurable logging
+
+✅ **Game Context Support**
+- JSON config files for reusable setups
+- CLI arguments for quick context input
+- Game goal, controls, and known bugs
+- Context passed to VLM for informed decisions
+- Logged in trajectory for analysis
 
 ## What's NOT Implemented (By Design)
 

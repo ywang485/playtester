@@ -3,9 +3,7 @@
   "steps": 50,
   "controller": "random",
   "seed": 42,
-  "viewport": {
-    "width": 1280,
-    "height": 720
-  },
+  "viewport_width": 1280,
+  "viewport_height": 720,
   "output_dir": "./output"
 }
