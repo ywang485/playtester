@@ -7,6 +7,7 @@ Provides a command-line interface for running playtest sessions.
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -16,6 +17,14 @@ from .controller import RandomController, VLMAdvisedController
 from .controller.base import Controller
 from .core.trajectory import TrajectoryLogger
 from .vlm import StubVLMClient
+
+# Try to import GeminiVLMClient (optional dependency)
+try:
+    from .vlm import GeminiVLMClient
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GeminiVLMClient = None
+    GEMINI_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(
@@ -36,7 +45,9 @@ def run_playtest(
     headless: bool = False,
     viewport_width: int = 1280,
     viewport_height: int = 720,
-    game_context: Optional[Dict[str, Any]] = None
+    game_context: Optional[Dict[str, Any]] = None,
+    vlm_provider: str = "stub",
+    vlm_api_key: Optional[str] = None
 ) -> None:
     """
     Run a single playtest session.
@@ -56,6 +67,8 @@ def run_playtest(
         viewport_width: Browser viewport width
         viewport_height: Browser viewport height
         game_context: Optional game context (goal, controls, known bugs, etc.)
+        vlm_provider: VLM provider ('stub' or 'gemini')
+        vlm_api_key: API key for VLM provider
     """
     logger.info("="*80)
     logger.info(f"Starting playtest session")
@@ -90,7 +103,10 @@ def run_playtest(
         seed=seed,
         viewport_width=viewport_width,
         viewport_height=viewport_height,
-        game_context=game_context
+        game_context=game_context,
+        vlm_provider=vlm_provider,
+        vlm_api_key=vlm_api_key,
+        output_dir=output_dir
     )
 
     # Initialize browser environment
@@ -157,7 +173,10 @@ def create_controller(
     seed: Optional[int],
     viewport_width: int,
     viewport_height: int,
-    game_context: Optional[Dict[str, Any]] = None
+    game_context: Optional[Dict[str, Any]] = None,
+    vlm_provider: str = "stub",
+    vlm_api_key: Optional[str] = None,
+    output_dir: Optional[Path] = None
 ) -> Controller:
     """
     Factory function to create controllers.
@@ -168,12 +187,15 @@ def create_controller(
         viewport_width: Browser viewport width
         viewport_height: Browser viewport height
         game_context: Optional game context for VLM
+        vlm_provider: VLM provider ('stub' or 'gemini')
+        vlm_api_key: API key for VLM provider (if needed)
+        output_dir: Output directory for screenshots (needed for VLM)
 
     Returns:
         Controller instance
 
     Raises:
-        ValueError: If controller type is unknown
+        ValueError: If controller type is unknown or VLM configuration is invalid
     """
     if controller_type == "random":
         return RandomController(
@@ -182,9 +204,14 @@ def create_controller(
             viewport_height=viewport_height
         )
     elif controller_type == "vlm":
-        # For MVP, use stub VLM client
-        # In production, replace with real VLM client that uses game_context
-        vlm_client = StubVLMClient(game_context=game_context)
+        # Create VLM client based on provider
+        vlm_client = create_vlm_client(
+            provider=vlm_provider,
+            game_context=game_context,
+            api_key=vlm_api_key,
+            output_dir=output_dir
+        )
+
         return VLMAdvisedController(
             seed=seed,
             vlm_client=vlm_client,
@@ -193,6 +220,60 @@ def create_controller(
         )
     else:
         raise ValueError(f"Unknown controller type: {controller_type}")
+
+
+def create_vlm_client(
+    provider: str,
+    game_context: Optional[Dict[str, Any]] = None,
+    api_key: Optional[str] = None,
+    output_dir: Optional[Path] = None
+):
+    """
+    Factory function to create VLM clients.
+
+    Args:
+        provider: VLM provider ('stub' or 'gemini')
+        game_context: Game context for VLM
+        api_key: API key for VLM provider
+        output_dir: Output directory (needed for absolute screenshot paths)
+
+    Returns:
+        VLM client instance
+
+    Raises:
+        ValueError: If provider is unknown or configuration is invalid
+    """
+    if provider == "stub":
+        logger.info("Using StubVLMClient (no real VLM)")
+        return StubVLMClient(game_context=game_context)
+
+    elif provider == "gemini":
+        if not GEMINI_AVAILABLE:
+            raise ValueError(
+                "Gemini provider requested but google-generativeai not installed. "
+                "Install with: pip install google-generativeai pillow"
+            )
+
+        # Get API key from parameter or environment
+        api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "Gemini API key required. Provide via --gemini-api-key or "
+                "set GOOGLE_API_KEY or GEMINI_API_KEY environment variable."
+            )
+
+        logger.info("Using GeminiVLMClient with Gemini 2.0 Flash")
+        return GeminiVLMClient(
+            api_key=api_key,
+            game_context=game_context,
+            output_dir=output_dir
+        )
+
+    else:
+        raise ValueError(
+            f"Unknown VLM provider: {provider}. "
+            f"Available providers: stub, gemini"
+        )
 
 
 def load_config(config_path: Path) -> Dict[str, Any]:
@@ -347,6 +428,21 @@ def main():
         help="Comma-separated list of known bug areas to monitor"
     )
 
+    # VLM arguments
+    parser.add_argument(
+        "--vlm-provider",
+        type=str,
+        choices=["stub", "gemini"],
+        default="stub",
+        help="VLM provider to use (stub=no real VLM, gemini=Google Gemini)"
+    )
+
+    parser.add_argument(
+        "--gemini-api-key",
+        type=str,
+        help="Google API key for Gemini (or set GOOGLE_API_KEY env var)"
+    )
+
     args = parser.parse_args()
 
     # Configure logging level
@@ -388,6 +484,10 @@ def main():
 
     game_context = game_context if game_context else None
 
+    # Extract VLM settings
+    vlm_provider = args.vlm_provider if hasattr(args, 'vlm_provider') and args.vlm_provider else config.get('vlm_provider', 'stub')
+    vlm_api_key = args.gemini_api_key if hasattr(args, 'gemini_api_key') and args.gemini_api_key else config.get('gemini_api_key')
+
     # Run playtest
     try:
         run_playtest(
@@ -399,7 +499,9 @@ def main():
             headless=headless,
             viewport_width=viewport_width,
             viewport_height=viewport_height,
-            game_context=game_context
+            game_context=game_context,
+            vlm_provider=vlm_provider,
+            vlm_api_key=vlm_api_key
         )
     except KeyboardInterrupt:
         logger.info("Interrupted by user")

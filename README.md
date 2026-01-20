@@ -177,6 +177,10 @@ playtester --url https://example.com/game --steps 20 --verbose
 - `--game-controls`: Description of game controls (for VLM context)
 - `--known-bugs`: Comma-separated list of known bug areas to monitor
 
+**VLM Arguments:**
+- `--vlm-provider`: VLM provider to use: `stub` (default) or `gemini`
+- `--gemini-api-key`: Google API key for Gemini (or set `GOOGLE_API_KEY` env var)
+
 ### Using Config Files
 
 For complex setups or reusable configurations, use JSON config files:
@@ -236,6 +240,44 @@ The VLM will use this context to:
 - Know which controls are available
 - Watch for specific known issues
 - Make more informed action decisions
+
+### Using Real VLM (Gemini)
+
+The playtester now supports **Google Gemini 2.0 Flash** for real VLM-powered playtesting:
+
+```bash
+# 1. Install Gemini dependencies
+pip install google-generativeai pillow
+
+# 2. Set API key (get from https://makersuite.google.com/app/apikey)
+export GOOGLE_API_KEY="your-api-key-here"
+
+# 3. Run with Gemini
+playtester --url https://research-monopoly.vercel.app \
+    --steps 100 \
+    --controller vlm \
+    --vlm-provider gemini \
+    --game-name "Monopoly" \
+    --game-goal "Buy properties and win" \
+    --game-controls "Click to interact" \
+    --verbose
+```
+
+**Or use a config file:**
+
+```bash
+# See examples/monopoly_gemini_config.json
+playtester --config examples/monopoly_gemini_config.json
+```
+
+**What Gemini Does:**
+- Analyzes screenshots at each step
+- Receives game context (goal, controls, known bugs)
+- Maintains state across steps (recent actions, observations)
+- Suggests context-aware actions (click, keypress, wait)
+- Validates actions before returning them
+
+**See `examples/gemini_usage.md` for detailed guide.**
 
 ### Output Structure
 
@@ -336,14 +378,22 @@ trajectory_logger.finalize()
 - Context passed to VLM for informed decisions
 - Logged in trajectory for analysis
 
+✅ **VLM Integration**
+- Google Gemini 2.0 Flash support
+- Context-aware prompt engineering
+- State management across steps
+- JSON action parsing and validation
+- Stub VLM for testing without API calls
+
 ## What's NOT Implemented (By Design)
 
 The following are intentionally deferred to maintain a clean MVP:
 
-❌ **Real VLM Integration**
-- Stub only; interface is defined
-- Replace `StubVLMClient` with real API client
-- Add prompt engineering, caching, rate limiting
+❌ **Additional VLM Providers**
+- Gemini 2.0 Flash is implemented
+- OpenAI GPT-4V not yet integrated
+- Anthropic Claude Vision not yet integrated
+- Easy to add using `VLMClient` interface
 
 ❌ **Bug Detectors**
 - No crash detection
@@ -450,22 +500,45 @@ class MyController(Controller):
 2. Add to `cli.py`'s `create_controller()` factory
 3. Add CLI argument choice
 
-### Adding Real VLM Integration
+### Adding a New VLM Provider
 
-1. Implement `VLMClient` interface:
+Gemini 2.0 Flash is already integrated. To add other VLMs (GPT-4V, Claude, etc.):
+
+1. Implement `VLMClient` interface (see `src/playtester/vlm/gemini.py` as example):
 
 ```python
+from playtester.vlm import VLMClient
+from playtester.core import Observation, Action
+from typing import Optional, Dict, Any
+
 class GPT4VisionClient(VLMClient):
-    def __init__(self, api_key: str):
+    def __init__(
+        self,
+        api_key: str,
+        game_context: Optional[Dict[str, Any]] = None,
+        output_dir: Optional[Path] = None
+    ):
+        super().__init__(game_context)
+        self.api_key = api_key
+        self.output_dir = output_dir
         self.client = openai.Client(api_key=api_key)
 
     def suggest_action(self, observation: Observation) -> Optional[Action]:
-        # Encode screenshot, query API, parse response
+        # 1. Load screenshot from observation
+        # 2. Build context-aware prompt using self.game_context
+        # 3. Query API
+        # 4. Parse JSON response into Action
+        # 5. Validate and return
+        pass
+
+    def get_semantic_analysis(self, observation: Observation) -> Optional[dict]:
+        # Optional: provide semantic insights
         pass
 ```
 
-2. Update `create_controller()` to instantiate real client
-3. Add API key configuration
+2. Add to `src/playtester/vlm/__init__.py`
+3. Update `create_vlm_client()` in `cli.py` to support new provider
+4. Add CLI argument for provider selection
 
 ### Adding a Bug Detector
 
@@ -518,7 +591,7 @@ black src/
 
 This codebase is designed to support:
 
-- **VLM Integration**: GPT-4V, Claude, Gemini, LLaVA
+- **VLM Integration**: Gemini ✅ (implemented), GPT-4V, Claude Vision, LLaVA
 - **Bug Detection**: Visual artifacts, crashes, soft-locks, dead-ends
 - **Performance Monitoring**: FPS, memory, network activity
 - **Advanced Observation**: HAR capture, video recording, accessibility tree

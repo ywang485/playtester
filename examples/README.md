@@ -19,7 +19,7 @@ playtester --config examples/minimal_config.json
 ```
 
 ### `monopoly_config.json`
-Comprehensive configuration for Monopoly game with full game context:
+Comprehensive configuration for Monopoly game with full game context (uses stub VLM):
 
 ```bash
 playtester --config examples/monopoly_config.json
@@ -30,6 +30,19 @@ This includes:
 - Known bugs to monitor
 - Test focus areas
 - Additional game metadata
+
+### `monopoly_gemini_config.json`
+Same as `monopoly_config.json` but configured to use Google Gemini 2.0 Flash:
+
+```bash
+# Set your API key first
+export GOOGLE_API_KEY="your-api-key-here"
+
+# Run with Gemini
+playtester --config examples/monopoly_gemini_config.json
+```
+
+See `gemini_usage.md` for detailed Gemini setup and usage instructions.
 
 ## Configuration Schema
 
@@ -119,6 +132,21 @@ run_playtest(
    playtester --config my_game_config.json
    ```
 
+## Using Gemini VLM
+
+See `gemini_usage.md` for comprehensive guide on:
+- Setting up Gemini API
+- Running playtests with Gemini
+- Understanding how Gemini makes decisions
+- Cost and rate limit considerations
+- Troubleshooting
+
+Quick start:
+```bash
+export GOOGLE_API_KEY="your-key"
+playtester --config examples/monopoly_gemini_config.json
+```
+
 ## Future Examples
 
 Additional examples to be added:
@@ -126,4 +154,5 @@ Additional examples to be added:
 - `custom_controller.py`: Example custom controller implementation
 - `trajectory_analysis.py`: Script to analyze trajectory files
 - `bug_detector.py`: Example bug detector implementation
-- `real_vlm_client.py`: Example real VLM integration
+- `anthropic_vlm_client.py`: Claude vision integration
+- `openai_vlm_client.py`: GPT-4V integration

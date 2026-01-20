@@ -1,0 +1,38 @@
+{
+  "url": "https://research-monopoly.vercel.app",
+  "steps": 100,
+  "controller": "vlm",
+  "vlm_provider": "gemini",
+  "seed": 42,
+  "headless": false,
+  "viewport_width": 1280,
+  "viewport_height": 720,
+  "game_context": {
+    "name": "Monopoly",
+    "goal": "Buy properties, collect rent, and bankrupt opponents to win the game",
+    "controls": {
+      "click": "Roll dice, buy properties, pay rent, end turn, interact with UI elements",
+      "escape": "Pause game or open menu (if applicable)"
+    },
+    "known_bugs": [
+      "UI may freeze when rolling doubles three times in a row",
+      "Property cards sometimes don't appear after purchase",
+      "Rent calculation may be incorrect for properties with houses",
+      "Bankruptcy screen may not appear immediately"
+    ],
+    "test_focus_areas": [
+      "Property purchase flow",
+      "Dice rolling mechanics",
+      "Rent payment system",
+      "Bankruptcy detection",
+      "Turn progression",
+      "UI responsiveness"
+    ],
+    "additional_info": {
+      "players": 4,
+      "starting_cash": 1500,
+      "pass_go_bonus": 200,
+      "notes": "Focus on testing the main game loop and detecting any UI freezes or calculation errors"
+    }
+  }
+}
