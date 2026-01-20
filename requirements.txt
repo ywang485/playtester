@@ -1,0 +1,9 @@
+# Core dependencies
+playwright==1.42.0
+
+# Future dependencies (commented out for MVP):
+# openai>=1.0.0  # For GPT-4V integration
+# anthropic>=0.18.0  # For Claude integration
+# pillow>=10.0.0  # For image processing
+# opencv-python>=4.8.0  # For advanced image analysis
+# numpy>=1.24.0  # For numerical operations

@@ -1,0 +1,11 @@
+{
+  "url": "https://example.com/game",
+  "steps": 50,
+  "controller": "random",
+  "seed": 42,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "output_dir": "./output"
+}
