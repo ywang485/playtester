@@ -1,56 +1,226 @@
 # Playtester: General-purpose Browser Playtesting Agent
 
-A production-quality research codebase for automated browser-based playtesting of WebGL games. This system combines low-level motion control with high-level Vision-Language Model (VLM) advisory capabilities for intelligent, reproducible game testing.
-
 ## Overview
 
-Playtester is an extensible foundation for automated game testing research that provides clean separation between environment, policy, perception, and logging layers while maintaining production-quality code standards.
+Playtester is an extensible foundation codebase for automated browser-based game testing that provides clean separation between environment, policy, perception, and logging layers while maintaining production-quality code standards. This current appraoch combines low-level motion control with high-level Vision-Language Model (VLM) advisory capabilities for intelligent, reproducible game testing.
 
 ### Key Features
 
-✨ **Hybrid Intelligence**: Combines heuristic fallback with VLM-powered action planning
+✨ **Hybrid Intelligence**: Combines heuristic-based, VLM-powered, and possibly reinforcement-learning based action planning
 ✨ **Comprehensive Monitoring**: Detects crashes, soft-locks, performance issues, and UI dead-ends
 ✨ **Rich Artifacts**: Video recording, console logs, DOM snapshots, and frame-by-frame screenshots
-✨ **Goal-Directed Testing**: VLM generates action sequences (2-5 actions) toward specific sub-goals
-✨ **Reproducible**: Deterministic behavior with seed control for debugging
+✨ **Goal-Directed Testing**: Allow specifying game testing goals.
 ✨ **WebGL2 Support**: Full compatibility with Godot, Unity, Three.js, and custom WebGL games
 
-### Demo
+## Usage
 
-[Demo video/screenshots would go here]
+### Quick Start
 
-**Example Playtest Session:**
 ```bash
-playtester --url https://research-monopoly.vercel.app \
+# Random controller (baseline)
+playtester --url https://example.com/game --steps 50
+
+# VLM-powered intelligent testing
+playtester --url https://example.com/game \
     --steps 100 \
     --controller vlm \
     --vlm-provider gemini \
-    --game-name "Monopoly" \
-    --game-goal "Buy properties and win the game"
+    --game-name "My Game" \
+    --game-goal "Complete tutorial and reach level 2"
 ```
 
-**Output:**
-- Session directory with timestamp: `output/20260120_143052/`
-- Video recording of full session
-- 100 annotated screenshots
-- Console log with all browser events
-- Issue summary: crashes, soft-locks, performance issues
-- DOM snapshots with layout metadata
-- Structured trajectory in JSONL format
+### CLI Arguments
 
----
+**Core Arguments:**
+- `--url`: URL of WebGL game to test (required)
+- `--steps`: Number of steps to run (default: 50)
+- `--output-dir`: Directory for output artifacts (default: ./output)
+- `--controller`: Controller type: `random` or `vlm` (default: random)
+- `--seed`: Random seed for reproducibility (default: random)
+- `--headless`: Run browser in headless mode (default: false)
+- `--viewport-width`: Browser viewport width (default: 1280)
+- `--viewport-height`: Browser viewport height (default: 720)
+- `--verbose`: Enable verbose logging
 
-## Table of Contents
+**Game Context Arguments:**
+- `--config`: Path to JSON config file with game context and settings
+- `--game-name`: Name of the game (for logging and VLM context)
+- `--game-goal`: Description of the game goal (for VLM context)
+- `--game-controls`: Description of game controls (for VLM context)
+- `--known-bugs`: Comma-separated list of known bug areas to monitor
 
-- [Assumptions](#assumptions)
-- [Design Choices](#design-choices)
-- [System Architecture](#system-architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [What's Implemented](#whats-implemented)
-- [Known Issues](#known-issues)
-- [Future Directions](#future-directions)
-- [Development](#development)
+**VLM Arguments:**
+- `--vlm-provider`: VLM provider to use: `stub` (default) or `gemini`
+- `--gemini-api-key`: Google API key for Gemini (or set `GOOGLE_API_KEY` env var)
+
+**Output Arguments:**
+- `--record-video`: Record video of playtesting session (default: enabled)
+- `--no-video`: Disable video recording
+
+### Using Config Files
+
+For complex setups or reusable configurations:
+
+```bash
+# Run with config file
+playtester --config examples/monopoly_config.json
+
+# Override specific settings
+playtester --config examples/monopoly_config.json --steps 200 --seed 123
+```
+
+**Config file format:**
+
+```json
+{
+  "url": "https://example.com/game",
+  "steps": 100,
+  "controller": "vlm",
+  "seed": 42,
+  "game_context": {
+    "name": "My Game",
+    "goal": "Complete all levels",
+    "controls": {
+      "click": "Interact with objects",
+      "keys": "Arrow keys to move, Space to jump"
+    },
+    "known_bugs": [
+      "UI freeze on level 3",
+      "Score not saving"
+    ]
+  },
+  "vlm_provider": "gemini"
+}
+```
+
+### Output Structure
+
+Each playtesting session creates a timestamped directory:
+
+```
+output/
+└── 20260120_143052/           # Session timestamp (YYYYMMDD_HHMMSS)
+    ├── trajectory.jsonl       # Complete session log with all events
+    ├── screenshots/           # Step-by-step screenshots
+    │   ├── step_0000.png
+    │   ├── step_0001.png
+    │   └── ...
+    ├── videos/                # Video recording (if enabled)
+    │   └── recording.webm
+    ├── console.log            # Full browser console output + errors
+    └── dom_snapshots/         # DOM state at session end
+        ├── snapshot.html      # Complete HTML content
+        └── layout_metadata.json  # Computed layout for all elements
+```
+
+### Trajectory Format
+
+Each line in `trajectory.jsonl` is a JSON object:
+
+```json
+{"type": "metadata", "schema_version": "1.0.0", "session_id": "...", "metadata": {...}}
+{"type": "observation", "data": {"step": 0, "timestamp": "...", "screenshot_path": "...", "issues": {...}}}
+{"type": "action", "step": 0, "timestamp": "...", "data": {"type": "click", "x": 640, "y": 360}}
+{"type": "event", "event_type": "vlm_action_sequence_response", "data": {"raw_response": "..."}}
+{"type": "event", "event_type": "video_saved", "data": {"video_path": "videos/recording.webm"}}
+{"type": "event", "event_type": "issue_summary", "data": {"crashes": 0, "soft_locks": 0, ...}}
+{"type": "finalize", "timestamp": "...", "metadata": {"total_steps": 50}}
+```
+
+**Event Types:**
+- `metadata`: Session initialization
+- `observation`: Browser state at each step (includes issue detection)
+- `action`: Action executed at each step
+- `event`: Notable occurrences (VLM outputs, artifacts saved, issue summary)
+- `finalize`: Session completion
+
+### Issue Detection
+
+The playtester automatically monitors for common issues:
+
+**Detected Issue Types:**
+
+1. **Crashes**: Page errors, browser crashes, WebGL context loss
+2. **Soft-locks**: DOM state unchanged for >10 steps despite inputs
+3. **Input Deadness**: Focus loss, unresponsive controls
+4. **UI Dead-ends**: Uncloseable modals, blocking overlays
+5. **Performance Regressions**: Frame time >100ms, long tasks >50ms
+6. **Network Failures**: HTTP 4xx/5xx errors, asset load failures
+
+**Issue Summary Output:**
+
+```
+================================================================================
+ISSUES DETECTED DURING PLAYTESTING:
+  Crashes: 0
+  WebGL Context Lost: 0
+  Soft-locks: 2
+  Focus Issues: 0
+  UI Dead-ends: 1
+  Performance Issues: 5
+  Network Failures: 0
+  Total Issues: 8
+================================================================================
+```
+
+### Programmatic Usage
+
+**Basic Usage (Random Controller)**:
+
+```python
+from pathlib import Path
+from datetime import datetime
+from playtester.browser import BrowserEnv
+from playtester.controller import RandomController
+from playtester.core import TrajectoryLogger
+
+# Create session directory
+session_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+session_dir = Path("./output") / session_timestamp
+session_dir.mkdir(parents=True, exist_ok=True)
+
+# Initialize trajectory logger
+trajectory_logger = TrajectoryLogger(session_dir, session_id=session_timestamp)
+trajectory_logger.initialize({
+    "url": "https://example.com/game",
+    "steps": 10,
+    "controller": "random"
+})
+
+# Initialize controller and browser
+controller = RandomController(seed=42)
+video_dir = session_dir / "videos"
+env = BrowserEnv(headless=False, record_video=True, video_dir=video_dir)
+
+# Run playtest
+env.start("https://example.com/game")
+
+for step in range(10):
+    # Observe (captures screenshot + console + issues)
+    screenshot_path = trajectory_logger.get_screenshot_path(step, relative=False)
+    observation = env.observe(screenshot_path)
+    trajectory_logger.log_observation(observation)
+
+    # Act
+    action = controller.select_action(observation)
+    trajectory_logger.log_action(action, step)
+    env.act(action)
+    controller.on_action_executed(action)
+
+# Clean up (saves video, console log, DOM snapshot)
+video_path = env.close(output_dir=session_dir)
+
+# Generate issue summary
+issue_summary = trajectory_logger.generate_issue_summary()
+trajectory_logger.log_event("issue_summary", issue_summary)
+
+# Finalize
+trajectory_logger.finalize({"total_steps": 10})
+
+print(f"Session complete: {session_dir}")
+print(f"Total issues: {issue_summary.get('total_issues', 0)}")
+```
+
 
 ---
 
@@ -540,214 +710,6 @@ export GOOGLE_API_KEY="your-api-key-here"
 
 ---
 
-## Usage
-
-### Quick Start
-
-```bash
-# Random controller (baseline)
-playtester --url https://example.com/game --steps 50
-
-# VLM-powered intelligent testing
-playtester --url https://example.com/game \
-    --steps 100 \
-    --controller vlm \
-    --vlm-provider gemini \
-    --game-name "My Game" \
-    --game-goal "Complete tutorial and reach level 2"
-```
-
-### CLI Arguments
-
-**Core Arguments:**
-- `--url`: URL of WebGL game to test (required)
-- `--steps`: Number of steps to run (default: 50)
-- `--output-dir`: Directory for output artifacts (default: ./output)
-- `--controller`: Controller type: `random` or `vlm` (default: random)
-- `--seed`: Random seed for reproducibility (default: random)
-- `--headless`: Run browser in headless mode (default: false)
-- `--viewport-width`: Browser viewport width (default: 1280)
-- `--viewport-height`: Browser viewport height (default: 720)
-- `--verbose`: Enable verbose logging
-
-**Game Context Arguments:**
-- `--config`: Path to JSON config file with game context and settings
-- `--game-name`: Name of the game (for logging and VLM context)
-- `--game-goal`: Description of the game goal (for VLM context)
-- `--game-controls`: Description of game controls (for VLM context)
-- `--known-bugs`: Comma-separated list of known bug areas to monitor
-
-**VLM Arguments:**
-- `--vlm-provider`: VLM provider to use: `stub` (default) or `gemini`
-- `--gemini-api-key`: Google API key for Gemini (or set `GOOGLE_API_KEY` env var)
-
-**Output Arguments:**
-- `--record-video`: Record video of playtesting session (default: enabled)
-- `--no-video`: Disable video recording
-
-### Using Config Files
-
-For complex setups or reusable configurations:
-
-```bash
-# Run with config file
-playtester --config examples/monopoly_config.json
-
-# Override specific settings
-playtester --config examples/monopoly_config.json --steps 200 --seed 123
-```
-
-**Config file format:**
-
-```json
-{
-  "url": "https://example.com/game",
-  "steps": 100,
-  "controller": "vlm",
-  "seed": 42,
-  "game_context": {
-    "name": "My Game",
-    "goal": "Complete all levels",
-    "controls": {
-      "click": "Interact with objects",
-      "keys": "Arrow keys to move, Space to jump"
-    },
-    "known_bugs": [
-      "UI freeze on level 3",
-      "Score not saving"
-    ]
-  },
-  "vlm_provider": "gemini"
-}
-```
-
-### Output Structure
-
-Each playtesting session creates a timestamped directory:
-
-```
-output/
-└── 20260120_143052/           # Session timestamp (YYYYMMDD_HHMMSS)
-    ├── trajectory.jsonl       # Complete session log with all events
-    ├── screenshots/           # Step-by-step screenshots
-    │   ├── step_0000.png
-    │   ├── step_0001.png
-    │   └── ...
-    ├── videos/                # Video recording (if enabled)
-    │   └── recording.webm
-    ├── console.log            # Full browser console output + errors
-    └── dom_snapshots/         # DOM state at session end
-        ├── snapshot.html      # Complete HTML content
-        └── layout_metadata.json  # Computed layout for all elements
-```
-
-### Trajectory Format
-
-Each line in `trajectory.jsonl` is a JSON object:
-
-```json
-{"type": "metadata", "schema_version": "1.0.0", "session_id": "...", "metadata": {...}}
-{"type": "observation", "data": {"step": 0, "timestamp": "...", "screenshot_path": "...", "issues": {...}}}
-{"type": "action", "step": 0, "timestamp": "...", "data": {"type": "click", "x": 640, "y": 360}}
-{"type": "event", "event_type": "vlm_action_sequence_response", "data": {"raw_response": "..."}}
-{"type": "event", "event_type": "video_saved", "data": {"video_path": "videos/recording.webm"}}
-{"type": "event", "event_type": "issue_summary", "data": {"crashes": 0, "soft_locks": 0, ...}}
-{"type": "finalize", "timestamp": "...", "metadata": {"total_steps": 50}}
-```
-
-**Event Types:**
-- `metadata`: Session initialization
-- `observation`: Browser state at each step (includes issue detection)
-- `action`: Action executed at each step
-- `event`: Notable occurrences (VLM outputs, artifacts saved, issue summary)
-- `finalize`: Session completion
-
-### Issue Detection
-
-The playtester automatically monitors for common issues:
-
-**Detected Issue Types:**
-
-1. **Crashes**: Page errors, browser crashes, WebGL context loss
-2. **Soft-locks**: DOM state unchanged for >10 steps despite inputs
-3. **Input Deadness**: Focus loss, unresponsive controls
-4. **UI Dead-ends**: Uncloseable modals, blocking overlays
-5. **Performance Regressions**: Frame time >100ms, long tasks >50ms
-6. **Network Failures**: HTTP 4xx/5xx errors, asset load failures
-
-**Issue Summary Output:**
-
-```
-================================================================================
-ISSUES DETECTED DURING PLAYTESTING:
-  Crashes: 0
-  WebGL Context Lost: 0
-  Soft-locks: 2
-  Focus Issues: 0
-  UI Dead-ends: 1
-  Performance Issues: 5
-  Network Failures: 0
-  Total Issues: 8
-================================================================================
-```
-
-### Programmatic Usage
-
-**Basic Usage (Random Controller)**:
-
-```python
-from pathlib import Path
-from datetime import datetime
-from playtester.browser import BrowserEnv
-from playtester.controller import RandomController
-from playtester.core import TrajectoryLogger
-
-# Create session directory
-session_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-session_dir = Path("./output") / session_timestamp
-session_dir.mkdir(parents=True, exist_ok=True)
-
-# Initialize trajectory logger
-trajectory_logger = TrajectoryLogger(session_dir, session_id=session_timestamp)
-trajectory_logger.initialize({
-    "url": "https://example.com/game",
-    "steps": 10,
-    "controller": "random"
-})
-
-# Initialize controller and browser
-controller = RandomController(seed=42)
-video_dir = session_dir / "videos"
-env = BrowserEnv(headless=False, record_video=True, video_dir=video_dir)
-
-# Run playtest
-env.start("https://example.com/game")
-
-for step in range(10):
-    # Observe (captures screenshot + console + issues)
-    screenshot_path = trajectory_logger.get_screenshot_path(step, relative=False)
-    observation = env.observe(screenshot_path)
-    trajectory_logger.log_observation(observation)
-
-    # Act
-    action = controller.select_action(observation)
-    trajectory_logger.log_action(action, step)
-    env.act(action)
-    controller.on_action_executed(action)
-
-# Clean up (saves video, console log, DOM snapshot)
-video_path = env.close(output_dir=session_dir)
-
-# Generate issue summary
-issue_summary = trajectory_logger.generate_issue_summary()
-trajectory_logger.log_event("issue_summary", issue_summary)
-
-# Finalize
-trajectory_logger.finalize({"total_steps": 10})
-
-print(f"Session complete: {session_dir}")
-print(f"Total issues: {issue_summary.get('total_issues', 0)}")
-```
 
 **Hierarchical Controller (Stub)**:
 
