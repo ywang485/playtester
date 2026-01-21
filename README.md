@@ -277,169 +277,77 @@ print(f"Total issues: {issue_summary.get('total_issues', 0)}")
 
 ## Assumptions
 
-The playtester is built on several key assumptions about automated game testing:
-
 ### 1. Vision-First Approach
-**Assumption**: Visual information (screenshots) is the primary signal for understanding game state, similar to how human players perceive games.
+The game is a completely a black box to the agent. The agent makes decision based on only raw vision signals and game context info optionally provided by the user. (Audio signals are out of scope for now)
 
-**Rationale**:
-- Games are designed for visual consumption
-- Screenshots capture UI, game state, and visual bugs
-- Enables testing games without access to internal state
-- Generalizes across different game engines and implementations
+### 2. Human-like playing behavior, not intentional bug searching
+By default, the agent tries to act like a human player. Although errors and bugs are recorded, it's not trying to intentionally trigger them.
 
-**Limitations**:
-- Audio cues are not captured
-- Hidden state (player stats, inventory) may not be visible
-- Requires VLM to interpret complex visual scenes
+### 3. Only observable issues
+Only reporting observable issues due to backbox assumption.
 
-### 2. Action Sequences Over Single Actions
-**Assumption**: Meaningful game progress requires coherent sequences of related actions rather than isolated random inputs.
+## Approach
+This current appraoch combines low-level motion control with high-level Vision-Language Model (VLM) advisory capabilities for intelligent, reproducible game testing.
 
-**Rationale**:
-- Human players execute multi-step strategies (e.g., "navigate to menu, select options, change setting")
-- Action sequences have clear goals and expected outcomes
-- Enables goal achievement evaluation
-- More efficient than purely random exploration
 
-**Implementation**: VLM generates 2-5 action sequences with specific goals.
-
-### 3. VLM as Advisory, Not Authoritative
-**Assumption**: VLMs are powerful but unreliable, requiring deterministic fallback behavior.
-
-**Rationale**:
-- VLMs have variable latency (100ms-5s per query)
-- API calls may fail or timeout
-- VLMs may produce invalid actions
-- Expensive to query continuously
-- Reproducibility requires deterministic behavior
-
-**Implementation**: VLM is consulted only when action queue is empty; random controller provides fallback.
-
-### 4. Issue Detection via Observable Signals
-**Assumption**: Most game issues manifest as observable signals (crashes, frozen UI, network errors, performance drops) rather than requiring deep game state inspection.
-
-**Rationale**:
-- Critical bugs affect player experience visibly
-- Browser APIs expose crashes, errors, network failures
-- DOM state changes indicate soft-locks
-- Performance APIs measure frame time and long tasks
-
-**Coverage**: Detects crashes, soft-locks, input deadness, UI dead-ends, performance regressions, network failures.
-
-### 5. Reproducibility Through Seeding
-**Assumption**: Deterministic random number generation enables reproducible playtesting for debugging and regression testing.
-
-**Rationale**:
-- Bugs must be reproducible to fix
-- Regression testing requires consistent behavior
-- Enables A/B testing of different strategies
-
-**Implementation**: All randomness (action selection, timing) uses seeded RNG.
-
----
-
-## Design Choices
-
-### Why VLM as Advisor?
-
-**Decision**: Make VLM advisory rather than directly controlling the browser.
-
-**Alternatives Considered**:
-1. **VLM as Driver**: VLM directly controls browser via tool use
-   - ❌ Slow (1-5s per action)
-   - ❌ Unreliable (API failures break testing)
-   - ❌ Not reproducible
-
-2. **Pure Heuristic**: No VLM, only random/scripted actions
-   - ❌ Cannot understand game context
-   - ❌ No goal-directed behavior
-   - ✅ Fast and reliable
-
-3. **Hybrid (Chosen)**: VLM suggests action sequences, controller executes
-   - ✅ Goal-directed intelligence from VLM
-   - ✅ Fast execution (VLM queried only when queue empty)
-   - ✅ Graceful degradation (fallback to heuristics)
-   - ✅ Reproducible (deterministic fallback)
-
-### Why JSONL for Trajectories?
-
-**Decision**: Use JSONL (JSON Lines) format for trajectory logging.
-
-**Alternatives Considered**:
-1. **Single JSON file**: `{"observations": [...], "actions": [...]}`
-   - ❌ Cannot stream during long sessions
-   - ❌ Risk of corruption on crash
-
-2. **SQLite database**:
-   - ❌ More complex (schema migrations, queries)
-   - ❌ Not human-readable
-   - ❌ Harder to diff in version control
-
-3. **JSONL (Chosen)**: One JSON object per line
-   - ✅ Streaming writes during long sessions
-   - ✅ Easy to parse line-by-line
-   - ✅ Git-friendly (line-based diffs)
-   - ✅ Safe for concurrent writes (append-only)
-   - ✅ Human-readable with `cat` or `jq`
-   - ✅ Flexible schema evolution
-
-### Why Playwright Over Selenium?
-
-**Decision**: Use Playwright for browser automation.
-
-**Alternatives Considered**:
-1. **Selenium**:
-   - ❌ Older architecture (WebDriver protocol)
-   - ❌ Worse WebGL support
-   - ❌ Less reliable for modern SPAs
-
-2. **Puppeteer**:
-   - ❌ Chrome-only (Playwright supports Firefox/WebKit)
-   - ❌ Less feature-rich
-
-3. **Playwright (Chosen)**:
-   - ✅ Modern async-first API
-   - ✅ Better WebGL/WebGL2 support (ANGLE + SwiftShader)
-   - ✅ Built-in video recording
-   - ✅ Rich developer tools (tracing, screenshots, network capture)
-   - ✅ Cross-browser support (Chromium, Firefox, WebKit)
-   - ✅ Active development and support
-
-### Why Session-Based Output Organization?
-
-**Decision**: Each playtest session creates a timestamped directory with all artifacts.
-
-**Rationale**:
-- **Isolation**: Multiple playtests don't interfere
-- **Traceability**: Timestamp makes sessions easy to identify
-- **Completeness**: All artifacts (video, screenshots, logs) in one place
-- **Cleanup**: Easy to delete old sessions
-- **Analysis**: Easy to compare sessions side-by-side
-
-**Structure**:
 ```
-output/
-└── 20260120_143052/           # Timestamp: YYYYMMDD_HHMMSS
-    ├── trajectory.jsonl       # Complete log
-    ├── screenshots/           # Frame-by-frame
-    ├── videos/                # Video recording
-    ├── console.log            # Browser console
-    └── dom_snapshots/         # HTML + layout metadata
+┌─────────────────────────────────────────────────────────────┐
+│              HIERARCHICAL CONTROLLER (STUB)                  │
+└─────────────────────────────────────────────────────────────┘
+
+Step N:
+  ┌──────────────────┐
+  │ OBSERVE          │
+  │  - Screenshot    │
+  │  - Game state    │
+  └────────┬─────────┘
+           │
+           v
+  ┌──────────────────┐
+  │ VLM PLANNER      │────────────────────────────────┐
+  │ (High-Level)     │                                │
+  │                  │  Every N steps or              │
+  │ Analyzes state   │  when sub-goal achieved        │
+  │ Sets sub-goal:   │                                │
+  │ "Navigate to     │                                │
+  │  settings menu"  │                                │
+  └────────┬─────────┘                                │
+           │                                          │
+           │ sub-goal                                 │
+           v                                          │
+  ┌──────────────────┐                                │
+  │ RL CONTROLLER    │                                │
+  │ (Low-Level)      │◀───────────────────────────────┘
+  │                  │  Receives new sub-goal
+  │ Learns to        │
+  │ achieve sub-goal │
+  │ efficiently      │
+  │                  │
+  │ Executes:        │
+  │ • click          │
+  │ • keypress       │
+  │ • mouse_move     │
+  │ • wait           │
+  └────────┬─────────┘
+           │
+           v
+  ┌──────────────────┐
+  │ BROWSER ACTION   │
+  └──────────────────┘
+
+  - VLM provides strategic direction (what to do)
+  - RL learns efficient tactics and motion-level control (how to do it)
 ```
 
-### Why No Global State?
+Rationale:
+  - Alternatives:
+    - RL-based: hard to generalize; lack higher-level planning
+    - Pure VLM-based:  Slow and bad at low-level motion control
+    - Whitebox approach: (Monte Carlo tree search, symbolic, heuristic based approach): Need access to game model; may not suitable for non-turn-based games
+    
+- This approach mekes least assumption on the game itself, and combines the advantage of RL-based approach and VLM-based approach,
 
-**Decision**: Avoid global variables and singletons; pass dependencies explicitly.
-
-**Rationale**:
-- **Testability**: Easy to mock and unit test
-- **Reproducibility**: No hidden dependencies
-- **Concurrency**: Safe for parallel runs
-- **Clarity**: Explicit data flow makes code easier to understand
-- **Debugging**: Easier to trace issues without hidden state
-
----
+The current implementation skips the RL part due to time constraints.
 
 ## System Architecture
 
@@ -449,8 +357,11 @@ The playtester follows a clean layered architecture with clear separation of con
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                          CLI Layer                               │
-│  (Argument parsing, session orchestration, logging)              │
+│                    Core Data Models Layer                        │
+│  (Serializable data structures)                                  │
+│  - Observation (screenshot, console, DOM, issues)                │
+│  - Action (wait, click, keypress, mouse_move)                   │
+│  - IssueDetection (crashes, soft-locks, performance)            │
 └─────────────────────┬───────────────────────────────────────────┘
                       │
                       v
@@ -460,11 +371,11 @@ The playtester follows a clean layered architecture with clear separation of con
 │  - Selects actions based on observations                         │
 │  - Maintains action queue (for VLM sequences)                    │
 │  - Falls back to heuristics on VLM failure                       │
-└─────────────────┬─────────────────────┬─────────────────────────┘
-                  │                     │
-         select_action()        suggest_action_sequence()
-                  │                     │
-                  v                     v
+└─────────────────┬──────────────────────────────────────────────┘
+                  │                     ^
+         select_action()                |
+                  │          suggest_action_sequence()
+                  v                     |
 ┌───────────────────────────┐  ┌──────────────────────────────────┐
 │    BrowserEnv Layer       │  │      VLM Client Layer            │
 │  (Environment interface)  │  │  (Advisory intelligence)         │
@@ -486,14 +397,6 @@ The playtester follows a clean layered architecture with clear separation of con
 │  - Emits console events                                          │
 └─────────────────────┬───────────────────────────────────────────┘
                       │
-                      v
-┌─────────────────────────────────────────────────────────────────┐
-│                    Core Data Models Layer                        │
-│  (Serializable data structures)                                  │
-│  - Observation (screenshot, console, DOM, issues)                │
-│  - Action (wait, click, keypress, mouse_move)                   │
-│  - IssueDetection (crashes, soft-locks, performance)            │
-└─────────────────────┬───────────────────────────────────────────┘
                       │
                       v
 ┌─────────────────────────────────────────────────────────────────┐
@@ -605,74 +508,6 @@ Step N:
    - VLM timeout → Random controller
    - Invalid actions → Filter and use valid ones, or fallback
 
-**Hierarchical Planning Architecture (Stub)**:
-
-The system includes a stub implementation for hierarchical planning that combines VLM strategic planning with RL tactical execution:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              HIERARCHICAL CONTROLLER (STUB)                  │
-└─────────────────────────────────────────────────────────────┘
-
-Step N:
-  ┌──────────────────┐
-  │ OBSERVE          │
-  │  - Screenshot    │
-  │  - Game state    │
-  └────────┬─────────┘
-           │
-           v
-  ┌──────────────────┐
-  │ VLM PLANNER      │────────────────────────────────┐
-  │ (High-Level)     │                                │
-  │                  │  Every N steps or              │
-  │ Analyzes state   │  when sub-goal achieved        │
-  │ Sets sub-goal:   │                                │
-  │ "Navigate to     │                                │
-  │  settings menu"  │                                │
-  └────────┬─────────┘                                │
-           │                                          │
-           │ sub-goal                                 │
-           v                                          │
-  ┌──────────────────┐                                │
-  │ RL CONTROLLER    │                                │
-  │ (Low-Level)      │◀───────────────────────────────┘
-  │                  │  Receives new sub-goal
-  │ Learns to        │
-  │ achieve sub-goal │
-  │ efficiently      │
-  │                  │
-  │ Executes:        │
-  │ • click          │
-  │ • keypress       │
-  │ • mouse_move     │
-  │ • wait           │
-  └────────┬─────────┘
-           │
-           v
-  ┌──────────────────┐
-  │ BROWSER ACTION   │
-  └──────────────────┘
-
-Benefits:
-  ✓ VLM provides strategic direction (what to do)
-  ✓ RL learns efficient tactics (how to do it)
-  ✓ Faster than pure VLM (RL executes without API calls)
-  ✓ More intelligent than pure RL (VLM provides guidance)
-
-Implementation:
-  • RLLowLevelController: Stub that randomly selects actions
-  • HierarchicalController: Combines VLM + RL (stub mode)
-  • See: src/playtester/controller/rl_low_level.py
-```
-
-**Note**: The hierarchical architecture is currently a **stub implementation**. The RL controller randomly selects actions rather than learning from experience. A production implementation would include:
-- Neural network policy (PPO, SAC, or DQN)
-- Vision encoder for processing screenshots
-- Temporal model (LSTM/Transformer) for action history
-- Reward computation based on sub-goal achievement
-- Training infrastructure with replay buffer and policy updates
-
 **Issue Detection Pipeline**:
 
 Issues are detected at every observation:
@@ -711,79 +546,9 @@ Observation Capture
          └─────────────────────┘
 ```
 
----
 
 
----
-
-
-**Hierarchical Controller (Stub)**:
-
-```python
-from pathlib import Path
-from playtester.browser import BrowserEnv
-from playtester.controller.rl_low_level import HierarchicalController, RLLowLevelController
-from playtester.vlm import create_vlm_client
-from playtester.core import TrajectoryLogger
-
-# Initialize VLM client (optional - stub works without VLM)
-vlm_client = create_vlm_client(
-    provider="gemini",
-    api_key="your-api-key",
-    game_name="My Game",
-    game_goal="Complete the tutorial"
-)
-
-# Initialize RL low-level controller
-rl_controller = RLLowLevelController(
-    seed=42,
-    viewport_width=1280,
-    viewport_height=720
-)
-
-# Initialize hierarchical controller
-controller = HierarchicalController(
-    seed=42,
-    vlm_client=vlm_client,
-    rl_controller=rl_controller,
-    viewport_width=1280,
-    viewport_height=720,
-    subgoal_timeout=10  # Request new sub-goal every 10 steps
-)
-
-# Initialize environment and logger
-session_dir = Path("./output/hierarchical_test")
-session_dir.mkdir(parents=True, exist_ok=True)
-trajectory_logger = TrajectoryLogger(session_dir)
-trajectory_logger.initialize({
-    "url": "https://example.com/game",
-    "controller": "hierarchical",
-    "subgoal_timeout": 10
-})
-
-video_dir = session_dir / "videos"
-env = BrowserEnv(headless=False, record_video=True, video_dir=video_dir)
-env.start("https://example.com/game")
-
-# Run playtest with hierarchical planning
-for step in range(50):
-    screenshot_path = trajectory_logger.get_screenshot_path(step, relative=False)
-    observation = env.observe(screenshot_path)
-    trajectory_logger.log_observation(observation)
-
-    # Hierarchical controller:
-    # - VLM sets sub-goals every N steps
-    # - RL controller executes actions to achieve sub-goal
-    action = controller.select_action(observation)
-    trajectory_logger.log_action(action, step)
-    env.act(action)
-
-env.close(output_dir=session_dir)
-trajectory_logger.finalize({"total_steps": 50})
-
-print("Hierarchical playtesting complete!")
-print("Note: This is a STUB implementation - RL controller uses random actions")
-```
+**Implementation**: VLM generates 2-5 action sequences with specific goals.
 
 ---
 
@@ -937,40 +702,7 @@ print("Note: This is a STUB implementation - RL controller uses random actions")
 
 ## Future Directions
 
-### Near-Term (Next 6 Months)
-
-#### 1. Maintain Mental Model of Game State
-
-**Goal**: Build and maintain a structured representation of game state beyond visual observations.
-
-**Approach**:
-- **State Extraction**: VLM periodically analyzes screenshots to extract:
-  - Player status (health, score, position)
-  - Game phase (menu, gameplay, pause, game over)
-  - Available actions (visible buttons, accessible areas)
-  - Recent state changes
-
-- **State Update**: Incremental updates based on:
-  - New screenshots
-  - Interaction history (actions taken, responses observed)
-  - Game description (from context)
-
-- **State Querying**: Controller queries mental model to:
-  - Avoid revisiting solved areas
-  - Identify unexplored regions
-  - Detect anomalies (stuck in loop, unexpected state)
-
-**Benefits**:
-- More efficient exploration (avoid redundant actions)
-- Better bug detection (detect impossible states)
-- Improved goal-directed behavior
-
-**Challenges**:
-- State representation (how to structure mental model?)
-- State consistency (handle partial observability)
-- VLM hallucination (validate extracted state)
-
-#### 2. Hierarchical Planning (VLM + RL) ⚠️ STUB IMPLEMENTED
+### 1. Hierarchical Planning (VLM + RL) ⚠️ STUB IMPLEMENTED
 
 **Status**: Stub implementation available at [src/playtester/controller/rl_low_level.py](src/playtester/controller/rl_low_level.py)
 
@@ -1016,26 +748,39 @@ RL Policy (Low-Level Controller)
    - VLM evaluates if sub-goal achieved
    - Or learned classifier for common sub-goals
 
-#### 3. High-Level Reinforcement Learning with Action History
 
-**Goal**: Train RL agent that learns from action history, not just current state.
+###2. Maintain Mental Model of Game State
+
+**Goal**: Build and maintain a structured representation of game state beyond visual observations.
 
 **Approach**:
-- **Input**: Last N observations + actions (temporal context)
-- **Output**: Next action or action sequence
-- **Reward**: Progress toward game objective + issue penalties
+- **State Extraction**: VLM periodically analyzes screenshots to extract:
+  - Player status (health, score, position)
+  - Game phase (menu, gameplay, pause, game over)
+  - Available actions (visible buttons, accessible areas)
+  - Recent state changes
 
-**Model**:
-- Transformer or LSTM for temporal modeling
-- Vision encoder for screenshots
-- Action encoder for previous actions
+- **State Update**: Incremental updates based on:
+  - New screenshots
+  - Interaction history (actions taken, responses observed)
+  - Game description (from context)
+
+- **State Querying**: Controller queries mental model to:
+  - Avoid revisiting solved areas
+  - Identify unexplored regions
+  - Detect anomalies (stuck in loop, unexpected state)
 
 **Benefits**:
-- Learns patterns across time (e.g., "click button, wait, then expect menu")
-- Avoids repeated mistakes
-- Adapts to game dynamics
+- More efficient exploration (avoid redundant actions)
+- Better bug detection (detect impossible states)
+- Improved goal-directed behavior
 
-#### 4. Local VLM Model for Reducing Latency/Cost
+**Challenges**:
+- State representation (how to structure mental model?)
+- State consistency (handle partial observability)
+- VLM hallucination (validate extracted state)
+
+#### 3. Local VLM Model for Reducing Latency/Cost
 
 **Goal**: Replace cloud API (Gemini) with local VLM for faster, cheaper inference.
 
@@ -1060,107 +805,8 @@ RL Policy (Low-Level Controller)
 3. Compare quality vs latency vs cost to Gemini
 4. Offer as alternative VLM provider
 
-### Long-Term (1-2 Years)
 
-#### 5. Multi-Agent Coordination
-
-**Goal**: Multiple playtesting agents collaborate to explore game more efficiently.
-
-**Approach**:
-- Agents share discovered state space
-- Coordinate to avoid redundant exploration
-- Specialize in different game aspects (UI testing, gameplay, stress testing)
-
-#### 6. Automated Bug Report Generation
-
-**Goal**: Synthesize human-readable bug reports from detected issues.
-
-**Output**:
-- Title: "Soft-lock in level 3 after collecting item"
-- Reproduction steps: "1. Navigate to level 3, 2. Collect golden key, 3. Attempt to open door"
-- Screenshots: Before/after state
-- Trajectory: Link to full JSONL log
-
-#### 7. Regression Testing & CI Integration
-
-**Goal**: Automated playtest runs in GitHub Actions for regression detection.
-
-**Workflow**:
-```yaml
-on: [push, pull_request]
-jobs:
-  playtest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: anthropics/playtester-action@v1
-        with:
-          url: https://staging.mygame.com
-          steps: 100
-          config: playtest_config.json
-      - name: Compare issues
-        run: |
-          compare_sessions.py \
-            --baseline main.json \
-            --current ${{ github.sha }}.json
-```
-
-#### 8. Coverage-Guided Exploration
-
-**Goal**: Maximize code coverage or state space coverage during playtesting.
-
-**Approach**:
-- Instrument game with coverage tracking (if source available)
-- Or use heuristic coverage (unique screenshots, DOM states)
-- Reward controller for discovering new states
-- Prioritize under-explored areas
-
-#### 9. Game-Specific Adapters
-
-**Goal**: Plug-in system for game-specific behavior.
-
-**Example**:
-```python
-class PlatformerAdapter(GameAdapter):
-    def extract_player_position(self, observation):
-        # Use VLM or CV to find player sprite
-        return (x, y)
-
-    def detect_death(self, observation):
-        # Detect game-over screen
-        return "GAME OVER" in observation.dom_metadata.title
-```
-
----
-
-## Development
-
-### Running Tests
-
-```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run tests (when added)
-pytest
-
-# Type checking
-mypy src/
-
-# Linting
-ruff check src/
-
-# Formatting
-black src/
-```
-
-### Code Style
-
-- **Line length**: 100 characters
-- **Type hints**: Preferred but not required for public APIs
-- **Docstrings**: Required for public APIs
-- **Logging**: Use structured logging (`logger.info/debug/warning/error`), not print
-
-### Extending the System
+## Extending the System
 
 #### Adding a New Action Type
 
@@ -1201,41 +847,3 @@ class GPT4VisionClient(VLMClient):
         # Analyze goal achievement
         pass
 ```
-
----
-
-## Recent Updates
-
-### Latest Features (January 2026)
-
-✨ **Video Recording**: Automatic recording of all playtesting sessions
-✨ **Comprehensive Issue Detection**: Crashes, soft-locks, performance issues, network failures
-✨ **Session Organization**: Timestamped directories for each playtest
-✨ **Console Logging**: Full browser console output saved to `console.log`
-✨ **DOM Snapshots**: HTML + computed layout metadata at session end
-✨ **Action Sequences**: VLM generates goal-directed action sequences (2-5 actions)
-✨ **Goal Evaluation**: VLM analyzes goal achievement between sequences
-✨ **Mouse Move Action**: Support for hover interactions and mouse positioning
-✨ **VLM Output Logging**: All raw VLM responses logged to trajectory for debugging
-
----
-
-## License
-
-[Specify license here]
-
-## Contributing
-
-[Add contribution guidelines here]
-
-## Citation
-
-If you use this codebase in research, please cite:
-
-```
-[Add citation info]
-```
-
-## Support
-
-For issues, questions, or contributions, please [open an issue](link-to-issues) or contact the research team.
