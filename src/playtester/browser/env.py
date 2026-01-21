@@ -17,7 +17,7 @@ from datetime import datetime
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page, ConsoleMessage
 
 from ..core.observation import Observation, ConsoleEvent, DOMMetadata
-from ..core.action import Action, WaitAction, ClickAction, KeypressAction
+from ..core.action import Action, WaitAction, ClickAction, KeypressAction, MouseMoveAction
 
 logger = logging.getLogger(__name__)
 
@@ -177,10 +177,17 @@ class BrowserEnv:
         dom_metadata = self._capture_dom_metadata()
 
         # Create observation with buffered console events
+        # Compute relative path from current directory to maintain "screenshots/" subdirectory
+        try:
+            relative_path = screenshot_path.relative_to(Path.cwd())
+        except ValueError:
+            # Fallback if screenshot_path is not relative to cwd
+            relative_path = Path("screenshots") / screenshot_path.name
+
         observation = Observation(
             step=self._current_step,
             timestamp=Observation.create_timestamp(),
-            screenshot_path=str(screenshot_path.name),  # Store relative path
+            screenshot_path=str(relative_path),  # Store relative path with subdirectory
             console_events=self._console_buffer.copy(),
             dom_metadata=dom_metadata
         )
@@ -243,6 +250,8 @@ class BrowserEnv:
             self._execute_click(action)
         elif isinstance(action, KeypressAction):
             self._execute_keypress(action)
+        elif isinstance(action, MouseMoveAction):
+            self._execute_mouse_move(action)
         else:
             raise ValueError(f"Unknown action type: {type(action)}")
 
@@ -263,6 +272,10 @@ class BrowserEnv:
         key_combo = f"{modifiers_str}+{action.key}" if modifiers_str else action.key
 
         self._page.keyboard.press(key_combo)
+
+    def _execute_mouse_move(self, action: MouseMoveAction) -> None:
+        """Execute a mouse move action."""
+        self._page.mouse.move(action.x, action.y)
 
     def close(self) -> None:
         """Clean up browser resources."""

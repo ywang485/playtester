@@ -119,6 +119,32 @@ class KeypressAction(Action):
         return "keypress"
 
 
+@dataclass
+class MouseMoveAction(Action):
+    """Move mouse to specified coordinates without clicking."""
+
+    x: int
+    y: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": self.action_type,
+            "x": self.x,
+            "y": self.y
+        }
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> 'MouseMoveAction':
+        return MouseMoveAction(
+            x=data["x"],
+            y=data["y"]
+        )
+
+    @property
+    def action_type(self) -> str:
+        return "mouse_move"
+
+
 def action_from_dict(data: Dict[str, Any]) -> Action:
     """
     Factory function to deserialize actions from dictionaries.
@@ -140,5 +166,7 @@ def action_from_dict(data: Dict[str, Any]) -> Action:
         return ClickAction.from_dict(data)
     elif action_type == "keypress":
         return KeypressAction.from_dict(data)
+    elif action_type == "mouse_move":
+        return MouseMoveAction.from_dict(data)
     else:
         raise ValueError(f"Unknown action type: {action_type}")
