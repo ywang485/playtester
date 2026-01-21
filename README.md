@@ -52,7 +52,7 @@ docker run -v $(pwd)/output:/app/output playtester \
     playtester --url https://example.com/game --steps 50
 ```
 
-### VLM Setup (Optional)
+### VLM Setup
 
 To use Google Gemini for intelligent playtesting:
 
