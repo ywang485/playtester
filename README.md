@@ -7,9 +7,13 @@ Playtester is an extensible foundation codebase for automated browser-based game
 ### Key Features
 
 ✨ **Hybrid Intelligence**: Combines heuristic-based, VLM-powered, and possibly reinforcement-learning based action planning
+
 ✨ **Comprehensive Monitoring**: Detects crashes, soft-locks, performance issues, and UI dead-ends
+
 ✨ **Rich Artifacts**: Video recording, console logs, DOM snapshots, and frame-by-frame screenshots
+
 ✨ **Goal-Directed Testing**: Allow specifying game testing goals.
+
 ✨ **WebGL2 Support**: Full compatibility with Godot, Unity, Three.js, and custom WebGL games
 
 ## Usage
