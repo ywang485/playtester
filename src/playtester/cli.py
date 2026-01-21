@@ -106,7 +106,8 @@ def run_playtest(
         game_context=game_context,
         vlm_provider=vlm_provider,
         vlm_api_key=vlm_api_key,
-        output_dir=output_dir
+        output_dir=output_dir,
+        trajectory_logger=trajectory_logger
     )
 
     # Initialize browser environment
@@ -176,7 +177,8 @@ def create_controller(
     game_context: Optional[Dict[str, Any]] = None,
     vlm_provider: str = "stub",
     vlm_api_key: Optional[str] = None,
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None,
+    trajectory_logger: Optional[TrajectoryLogger] = None
 ) -> Controller:
     """
     Factory function to create controllers.
@@ -190,6 +192,7 @@ def create_controller(
         vlm_provider: VLM provider ('stub' or 'gemini')
         vlm_api_key: API key for VLM provider (if needed)
         output_dir: Output directory for screenshots (needed for VLM)
+        trajectory_logger: Optional trajectory logger for logging VLM outputs
 
     Returns:
         Controller instance
@@ -209,7 +212,8 @@ def create_controller(
             provider=vlm_provider,
             game_context=game_context,
             api_key=vlm_api_key,
-            output_dir=output_dir
+            output_dir=output_dir,
+            trajectory_logger=trajectory_logger
         )
 
         return VLMAdvisedController(
@@ -226,7 +230,8 @@ def create_vlm_client(
     provider: str,
     game_context: Optional[Dict[str, Any]] = None,
     api_key: Optional[str] = None,
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None,
+    trajectory_logger: Optional[TrajectoryLogger] = None
 ):
     """
     Factory function to create VLM clients.
@@ -236,6 +241,7 @@ def create_vlm_client(
         game_context: Game context for VLM
         api_key: API key for VLM provider
         output_dir: Output directory (needed for absolute screenshot paths)
+        trajectory_logger: Optional trajectory logger for logging VLM outputs
 
     Returns:
         VLM client instance
@@ -266,7 +272,8 @@ def create_vlm_client(
         return GeminiVLMClient(
             api_key=api_key,
             game_context=game_context,
-            output_dir=output_dir
+            output_dir=output_dir,
+            trajectory_logger=trajectory_logger
         )
 
     else:

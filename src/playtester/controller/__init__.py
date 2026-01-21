@@ -3,6 +3,7 @@ Controller (policy) implementations for the playtester.
 """
 
 from .base import Controller
-from .heuristic import RandomController, VLMAdvisedController
+from .heuristic import RandomController
+from .vlm_advised import VLMAdvisedController
 
 __all__ = ["Controller", "RandomController", "VLMAdvisedController"]

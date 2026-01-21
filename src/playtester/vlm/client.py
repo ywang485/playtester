@@ -10,7 +10,7 @@ integrate real VLM APIs (GPT-4V, Claude, Gemini, etc.).
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 
 from ..core.observation import Observation
@@ -76,7 +76,12 @@ class VLMClient(ABC):
         pass
 
     @abstractmethod
-    def get_semantic_analysis(self, observation: Observation) -> Optional[dict]:
+    def get_semantic_analysis(
+        self,
+        observation: Observation,
+        previous_goal: Optional[str] = None,
+        actions_taken: Optional[List[Action]] = None
+    ) -> Optional[dict]:
         """
         Provide semantic analysis of the current state.
 
@@ -87,6 +92,8 @@ class VLMClient(ABC):
 
         Args:
             observation: Current browser state
+            previous_goal: The goal from the previous action sequence (if any)
+            actions_taken: The actions that were executed (if any)
 
         Returns:
             Dictionary with analysis results, or None if unavailable
@@ -154,12 +161,37 @@ class StubVLMClient(VLMClient):
         # For now, return a safe default
         return WaitAction(duration_ms=1000)
 
-    def get_semantic_analysis(self, observation: Observation) -> Optional[dict]:
+    def suggest_action_sequence(self, observation: Observation) -> Optional[Dict[str, Any]]:
+        """
+        Return a stub action sequence suggestion.
+
+        Args:
+            observation: Current browser state
+
+        Returns:
+            Stub action sequence with a single wait action
+        """
+        logger.debug(f"StubVLMClient: returning stub action sequence for step {observation.step}")
+
+        # Return a stub sequence with a single action
+        return {
+            "goal": "Wait and observe (stub)",
+            "actions": [WaitAction(duration_ms=1000)]
+        }
+
+    def get_semantic_analysis(
+        self,
+        observation: Observation,
+        previous_goal: Optional[str] = None,
+        actions_taken: Optional[List[Action]] = None
+    ) -> Optional[dict]:
         """
         Return stub semantic analysis.
 
         Args:
             observation: Current browser state
+            previous_goal: The goal from the previous action sequence (if any)
+            actions_taken: The actions that were executed (if any)
 
         Returns:
             Empty analysis dict
@@ -174,7 +206,9 @@ class StubVLMClient(VLMClient):
 
         return {
             "stub": True,
-            "message": "Real VLM analysis not implemented yet"
+            "message": "Real VLM analysis not implemented yet",
+            "goal_achieved": True if previous_goal else None,
+            "next_goal": "Continue exploration"
         }
 
 
