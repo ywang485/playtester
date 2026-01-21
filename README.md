@@ -14,6 +14,53 @@ Playtester is an extensible foundation codebase for automated browser-based game
 
 ## Usage
 
+## Installation
+
+### Local Installation
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd playtester
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install Playwright browsers
+playwright install chromium
+
+# Install package in editable mode
+pip install -e .
+```
+
+### Docker Installation
+
+```bash
+# Build image
+docker build -t playtester .
+
+# Run example (mount output directory)
+docker run -v $(pwd)/output:/app/output playtester \
+    playtester --url https://example.com/game --steps 50
+```
+
+### VLM Setup (Optional)
+
+To use Google Gemini for intelligent playtesting:
+
+```bash
+# Install Gemini dependencies
+pip install google-generativeai pillow
+
+# Set API key (get from https://makersuite.google.com/app/apikey)
+export GOOGLE_API_KEY="your-api-key-here"
+```
+
+
 ### Quick Start
 
 ```bash
@@ -662,51 +709,6 @@ Observation Capture
 
 ---
 
-## Installation
-
-### Local Installation
-
-```bash
-# Clone repository
-git clone <repository-url>
-cd playtester
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install Playwright browsers
-playwright install chromium
-
-# Install package in editable mode
-pip install -e .
-```
-
-### Docker Installation
-
-```bash
-# Build image
-docker build -t playtester .
-
-# Run example (mount output directory)
-docker run -v $(pwd)/output:/app/output playtester \
-    playtester --url https://example.com/game --steps 50
-```
-
-### VLM Setup (Optional)
-
-To use Google Gemini for intelligent playtesting:
-
-```bash
-# Install Gemini dependencies
-pip install google-generativeai pillow
-
-# Set API key (get from https://makersuite.google.com/app/apikey)
-export GOOGLE_API_KEY="your-api-key-here"
-```
 
 ---
 
