@@ -47,7 +47,8 @@ def run_playtest(
     viewport_height: int = 720,
     game_context: Optional[Dict[str, Any]] = None,
     vlm_provider: str = "stub",
-    vlm_api_key: Optional[str] = None
+    vlm_api_key: Optional[str] = None,
+    record_video: bool = True
 ) -> None:
     """
     Run a single playtest session.
@@ -69,32 +70,40 @@ def run_playtest(
         game_context: Optional game context (goal, controls, known bugs, etc.)
         vlm_provider: VLM provider ('stub' or 'gemini')
         vlm_api_key: API key for VLM provider
+        record_video: Enable video recording of the session
     """
+    # Create session-specific directory
+    from datetime import datetime
+    session_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    session_dir = output_dir / session_timestamp
+    session_dir.mkdir(parents=True, exist_ok=True)
+
     logger.info("="*80)
-    logger.info(f"Starting playtest session")
+    logger.info(f"Starting playtest session: {session_timestamp}")
     logger.info(f"URL: {url}")
     logger.info(f"Steps: {steps}")
     logger.info(f"Controller: {controller_type}")
     logger.info(f"Seed: {seed}")
-    logger.info(f"Output: {output_dir}")
+    logger.info(f"Session output: {session_dir}")
     if game_context:
         logger.info(f"Game context: {game_context.get('name', 'N/A')}")
         if game_context.get('goal'):
             logger.info(f"  Goal: {game_context['goal']}")
     logger.info("="*80)
 
-    # Initialize trajectory logger
+    # Initialize trajectory logger in session directory
     metadata = {
         "url": url,
         "steps": steps,
         "controller_type": controller_type,
         "seed": seed,
-        "viewport": {"width": viewport_width, "height": viewport_height}
+        "viewport": {"width": viewport_width, "height": viewport_height},
+        "session_id": session_timestamp
     }
     if game_context:
         metadata["game_context"] = game_context
 
-    trajectory_logger = TrajectoryLogger(output_dir)
+    trajectory_logger = TrajectoryLogger(session_dir, session_id=session_timestamp)
     trajectory_logger.initialize(metadata)
 
     # Initialize controller
@@ -106,15 +115,18 @@ def run_playtest(
         game_context=game_context,
         vlm_provider=vlm_provider,
         vlm_api_key=vlm_api_key,
-        output_dir=output_dir,
+        output_dir=session_dir,
         trajectory_logger=trajectory_logger
     )
 
     # Initialize browser environment
+    video_dir = session_dir / "videos" if record_video else None
     env = BrowserEnv(
         headless=headless,
         viewport_width=viewport_width,
-        viewport_height=viewport_height
+        viewport_height=viewport_height,
+        record_video=record_video,
+        video_dir=video_dir
     )
 
     try:
@@ -152,10 +164,17 @@ def run_playtest(
             # Notify controller
             controller.on_action_executed(action)
 
+        # Summarize session outputs
         logger.info("="*80)
         logger.info(f"Playtest session complete: {steps} steps")
-        logger.info(f"Trajectory: {trajectory_logger.trajectory_path}")
-        logger.info(f"Screenshots: {trajectory_logger.screenshots_dir}")
+        logger.info(f"Session: {session_timestamp}")
+        logger.info(f"Outputs:")
+        logger.info(f"  Session directory: {session_dir}")
+        logger.info(f"  Trajectory: {trajectory_logger.trajectory_path}")
+        logger.info(f"  Screenshots: {trajectory_logger.screenshots_dir}")
+        if record_video:
+            logger.info(f"  Video: {video_dir}")
+        logger.info(f"  Console Log: {session_dir / 'console.log'}")
         logger.info("="*80)
 
     except Exception as e:
@@ -164,8 +183,44 @@ def run_playtest(
         raise
 
     finally:
-        # Clean up
-        env.close()
+        # Clean up and save video + console log
+        video_path = env.close(output_dir=session_dir)
+
+        # Log video path to trajectory if recording was enabled
+        if video_path:
+            trajectory_logger.log_event("video_saved", {
+                "video_path": str(video_path.relative_to(session_dir) if video_path.is_relative_to(session_dir) else video_path),
+                "size_bytes": video_path.stat().st_size if video_path.exists() else None
+            })
+
+        # Log console log path
+        console_log_path = session_dir / "console.log"
+        if console_log_path.exists():
+            trajectory_logger.log_event("console_log_saved", {
+                "console_log_path": "console.log",
+                "size_bytes": console_log_path.stat().st_size
+            })
+
+        # Generate and log issue summary
+        issue_summary = trajectory_logger.generate_issue_summary()
+        trajectory_logger.log_event("issue_summary", issue_summary)
+
+        # Log issue summary to console
+        if issue_summary.get("total_issues", 0) > 0:
+            logger.warning("="*80)
+            logger.warning("ISSUES DETECTED DURING PLAYTESTING:")
+            logger.warning(f"  Crashes: {issue_summary.get('crashes', 0)}")
+            logger.warning(f"  WebGL Context Lost: {issue_summary.get('webgl_context_lost', 0)}")
+            logger.warning(f"  Soft-locks: {issue_summary.get('soft_locks', 0)}")
+            logger.warning(f"  Focus Issues: {issue_summary.get('focus_issues', 0)}")
+            logger.warning(f"  UI Dead-ends: {issue_summary.get('ui_deadends', 0)}")
+            logger.warning(f"  Performance Issues: {issue_summary.get('performance_issues', 0)}")
+            logger.warning(f"  Network Failures: {issue_summary.get('network_failures', 0)}")
+            logger.warning(f"  Total Issues: {issue_summary.get('total_issues', 0)}")
+            logger.warning("="*80)
+        else:
+            logger.info("No issues detected during playtesting session.")
+
         trajectory_logger.finalize({"total_steps": controller.step_count})
 
 
@@ -404,6 +459,19 @@ def main():
         help="Enable verbose logging"
     )
 
+    parser.add_argument(
+        "--record-video",
+        action="store_true",
+        default=True,
+        help="Record video of the playtesting session (default: enabled)"
+    )
+
+    parser.add_argument(
+        "--no-video",
+        action="store_true",
+        help="Disable video recording"
+    )
+
     # Game context arguments
     parser.add_argument(
         "--config",
@@ -495,6 +563,9 @@ def main():
     vlm_provider = args.vlm_provider if hasattr(args, 'vlm_provider') and args.vlm_provider else config.get('vlm_provider', 'stub')
     vlm_api_key = args.gemini_api_key if hasattr(args, 'gemini_api_key') and args.gemini_api_key else config.get('gemini_api_key')
 
+    # Extract video recording setting
+    record_video = not args.no_video if hasattr(args, 'no_video') else config.get('record_video', True)
+
     # Run playtest
     try:
         run_playtest(
@@ -508,7 +579,8 @@ def main():
             viewport_height=viewport_height,
             game_context=game_context,
             vlm_provider=vlm_provider,
-            vlm_api_key=vlm_api_key
+            vlm_api_key=vlm_api_key,
+            record_video=record_video
         )
     except KeyboardInterrupt:
         logger.info("Interrupted by user")

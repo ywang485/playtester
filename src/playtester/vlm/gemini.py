@@ -19,7 +19,7 @@ except ImportError:
     genai = None
 
 from ..core.observation import Observation
-from ..core.action import Action, WaitAction, ClickAction, KeypressAction, action_from_dict
+from ..core.action import Action, WaitAction, ClickAction, KeypressAction, MouseMoveAction, action_from_dict
 from .client import VLMClient
 
 logger = logging.getLogger(__name__)
@@ -165,7 +165,13 @@ Analyze the screenshot and suggest a SEQUENCE of actions to accomplish a specifi
    - Coordinates are in pixels from top-left (0,0)
    - Use this when: interacting with buttons, UI elements, game objects
 
-3. **keypress**: Press a keyboard key
+3. **mouse_move**: Move mouse to coordinates without clicking
+   - Format: {"type": "mouse_move", "x": <int>, "y": <int>}
+   - Example: {"type": "mouse_move", "x": 640, "y": 360}
+   - Coordinates are in pixels from top-left (0,0)
+   - Use this when: hovering to reveal tooltips, trigger hover effects, or position before clicking
+
+4. **keypress**: Press a keyboard key
    - Format: {"type": "keypress", "key": "<key_name>"}
    - Example: {"type": "keypress", "key": "Space"}
    - Common keys: "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Enter", "Escape", "w", "a", "s", "d"
@@ -180,10 +186,11 @@ Do not include any other text or explanation outside the JSON.
 
 Example response:
 {
-  "goal": "Click the start button and begin the game",
+  "goal": "Hover over the settings button and click it",
   "actions": [
-    {"type": "click", "x": 640, "y": 360},
-    {"type": "wait", "duration_ms": 1000}
+    {"type": "mouse_move", "x": 100, "y": 50},
+    {"type": "wait", "duration_ms": 500},
+    {"type": "click", "x": 100, "y": 50}
   ]
 }
 
@@ -191,6 +198,7 @@ Example response:
 - Plan a coherent sequence of actions toward a specific sub-goal
 - Each sequence should accomplish something meaningful (e.g., "navigate to menu", "collect item", "defeat enemy")
 - Include 2-5 actions per sequence (not too few, not too many)
+- Use mouse_move before clicks when hover effects are important
 - Include wait actions between interactions when needed for game response
 - Consider the game objective and current state
 - Watch for the known issues mentioned above
@@ -507,6 +515,10 @@ Example response:
 
         elif isinstance(action, ClickAction):
             # Click coordinates should be positive
+            return action.x >= 0 and action.y >= 0
+
+        elif isinstance(action, MouseMoveAction):
+            # Mouse move coordinates should be positive
             return action.x >= 0 and action.y >= 0
 
         elif isinstance(action, KeypressAction):

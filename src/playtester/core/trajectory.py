@@ -190,3 +190,67 @@ class TrajectoryLogger:
 
         self._append_entry(entry)
         logger.info(f"Trajectory finalized: {self.trajectory_path}")
+
+    def generate_issue_summary(self) -> Dict[str, Any]:
+        """
+        Generate a summary of all issues detected during the session.
+
+        Returns:
+            Dictionary with issue counts and details
+        """
+        summary = {
+            "crashes": 0,
+            "webgl_context_lost": 0,
+            "soft_locks": 0,
+            "focus_issues": 0,
+            "ui_deadends": 0,
+            "performance_issues": 0,
+            "network_failures": 0,
+            "total_issues": 0,
+            "steps_with_issues": []
+        }
+
+        try:
+            with open(self.trajectory_path, "r") as f:
+                for line in f:
+                    entry = json.loads(line)
+                    if entry.get("type") == "observation":
+                        data = entry.get("data", {})
+                        issues = data.get("issues")
+                        if issues:
+                            step = data.get("step")
+
+                            if issues.get("page_error") or issues.get("webgl_context_lost"):
+                                summary["crashes"] += 1
+                                summary["steps_with_issues"].append(step)
+
+                            if issues.get("webgl_context_lost"):
+                                summary["webgl_context_lost"] += 1
+
+                            if issues.get("state_unchanged_for_steps", 0) > 10:
+                                summary["soft_locks"] += 1
+                                summary["steps_with_issues"].append(step)
+
+                            if issues.get("focus_lost"):
+                                summary["focus_issues"] += 1
+
+                            if issues.get("modal_detected") or issues.get("overlay_blocking"):
+                                summary["ui_deadends"] += 1
+
+                            if issues.get("long_task_detected") or (issues.get("frame_time_ms") or 0) > 100:
+                                summary["performance_issues"] += 1
+
+                            if issues.get("http_errors") or issues.get("asset_load_failures"):
+                                summary["network_failures"] += 1
+
+            summary["total_issues"] = (
+                summary["crashes"] +
+                summary["soft_locks"] +
+                summary["ui_deadends"] +
+                summary["performance_issues"] +
+                summary["network_failures"]
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate issue summary: {e}")
+
+        return summary
