@@ -203,6 +203,17 @@ Example response:
 - Consider the game objective and current state
 - Watch for the known issues mentioned above
 - Balance exploration and exploitation
+- Start with low-entropy, culturally common inputs rather than random actions.
+- Try Enter / Return or Space to continue, confirm, start, or advance text.
+- Try ESC to cancel, pause, exit overlays, or open a menu.
+- Attempt basic movement using arrow keys and WASD, including short holds to test continuous motion.
+- Click the center of the screen or prominent UI elements with the mouse.
+- Sweep the mouse slowly to detect hover highlights, cursor changes, or interactive regions.
+- Prioritize and repeat any action that produces feedback (animation, sound, text, camera movement).
+- Gradually escalate exploration only if no feedback occurs, expanding to nearby or related inputs.
+- Avoid rapid input spam; favor single actions followed by observation.
+- If an action leads to confusion or an unexpected state, attempt recovery using ESC, right-click, or menu navigation.
+- When stuck, look for restart, back, or menu options before increasing randomness.
 """
         return prompt
 
