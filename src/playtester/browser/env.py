@@ -9,6 +9,7 @@ ensuring separation of concerns and making it easy to:
 """
 
 import logging
+import platform
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
@@ -84,23 +85,38 @@ class BrowserEnv:
         self._playwright = sync_playwright().start()
 
         # Configure browser args for WebGL/WebGL2 support
+        # Platform-specific configuration for best compatibility
+        system = platform.system()
+
         browser_args = [
             '--enable-webgl',
             '--enable-webgl2',
-            '--use-gl=angle',  # ANGLE for better WebGL2 support
-            '--use-angle=swiftshader',  # SwiftShader backend for ANGLE
-            '--enable-features=WebGL2ComputeContext',
             '--disable-blink-features=AutomationControlled',
-            '--disable-gpu-vsync',  # Prevent vsync issues
-            '--enable-unsafe-webgpu',  # Enable WebGPU features
+            '--ignore-gpu-blocklist',
         ]
 
-        # Add headless-specific args for better WebGL support
-        if self.headless:
+        # On Linux/Docker: use ANGLE + SwiftShader for software rendering
+        # On macOS/Windows: use native GPU support (better compatibility)
+        if system == 'Linux' or self.headless:
+            logger.info("Using ANGLE + SwiftShader for WebGL2 (Linux/headless mode)")
             browser_args.extend([
-                '--disable-gpu',  # Disable GPU in headless (use software)
-                '--disable-dev-shm-usage',  # Avoid shared memory issues
-                '--no-sandbox',  # Required for some headless environments
+                '--use-gl=angle',  # ANGLE for better WebGL2 support
+                '--use-angle=swiftshader',  # SwiftShader backend for ANGLE
+                '--enable-features=WebGL2ComputeContext',
+                '--disable-gpu-vsync',  # Prevent vsync issues
+            ])
+
+            if self.headless:
+                browser_args.extend([
+                    '--disable-gpu',  # Disable GPU in headless (use software)
+                    '--disable-dev-shm-usage',  # Avoid shared memory issues
+                    '--no-sandbox',  # Required for some headless environments
+                ])
+        else:
+            logger.info(f"Using native GPU support for WebGL2 ({system})")
+            browser_args.extend([
+                '--enable-features=WebGL2ComputeContext',
+                '--disable-gpu-vsync',
             ])
 
         self._browser = self._playwright.chromium.launch(
