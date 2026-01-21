@@ -175,6 +175,7 @@ def run_playtest(
         if record_video:
             logger.info(f"  Video: {video_dir}")
         logger.info(f"  Console Log: {session_dir / 'console.log'}")
+        logger.info(f"  DOM Snapshots: {session_dir / 'dom_snapshots'}")
         logger.info("="*80)
 
     except Exception as e:
@@ -199,6 +200,19 @@ def run_playtest(
             trajectory_logger.log_event("console_log_saved", {
                 "console_log_path": "console.log",
                 "size_bytes": console_log_path.stat().st_size
+            })
+
+        # Log DOM snapshots path
+        dom_snapshots_dir = session_dir / "dom_snapshots"
+        if dom_snapshots_dir.exists():
+            html_path = dom_snapshots_dir / "snapshot.html"
+            metadata_path = dom_snapshots_dir / "layout_metadata.json"
+            trajectory_logger.log_event("dom_snapshot_saved", {
+                "dom_snapshots_dir": "dom_snapshots",
+                "html_path": "dom_snapshots/snapshot.html",
+                "html_size_bytes": html_path.stat().st_size if html_path.exists() else None,
+                "metadata_path": "dom_snapshots/layout_metadata.json",
+                "metadata_size_bytes": metadata_path.stat().st_size if metadata_path.exists() else None
             })
 
         # Generate and log issue summary

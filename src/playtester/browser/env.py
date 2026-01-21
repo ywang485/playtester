@@ -11,7 +11,7 @@ ensuring separation of concerns and making it easy to:
 import logging
 import platform
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page, ConsoleMessage
@@ -565,6 +565,8 @@ class BrowserEnv:
         # Save console log before closing
         if output_dir:
             self._save_console_log(output_dir)
+            # Save DOM snapshot (HTML + layout metadata)
+            self._save_dom_snapshot(output_dir)
 
         if self._context:
             self._context.close()
@@ -608,6 +610,152 @@ class BrowserEnv:
             logger.info(f"Console log saved: {console_log_path} ({len(self._all_console_events)} events)")
         except Exception as e:
             logger.error(f"Failed to save console log: {e}")
+
+    def _save_dom_snapshot(self, output_dir: Path) -> None:
+        """
+        Save HTML and computed layout metadata to dom_snapshots directory.
+
+        Args:
+            output_dir: Directory to save DOM snapshot
+        """
+        if not self._page:
+            logger.warning("Cannot save DOM snapshot: browser page not available")
+            return
+
+        dom_snapshots_dir = output_dir / "dom_snapshots"
+        dom_snapshots_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Capture HTML content
+            html_content = self._page.content()
+
+            # Capture computed layout metadata
+            layout_metadata = self._capture_layout_metadata()
+
+            # Save HTML
+            html_path = dom_snapshots_dir / "snapshot.html"
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            # Save layout metadata as JSON
+            import json
+            metadata_path = dom_snapshots_dir / "layout_metadata.json"
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(layout_metadata, f, indent=2, ensure_ascii=False)
+
+            logger.info(
+                f"DOM snapshot saved: {dom_snapshots_dir} "
+                f"(HTML: {len(html_content)} chars, "
+                f"{len(layout_metadata.get('elements', []))} elements)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to save DOM snapshot: {e}", exc_info=True)
+
+    def _capture_layout_metadata(self) -> Dict[str, Any]:
+        """
+        Capture computed layout metadata for all elements.
+
+        Returns:
+            Dictionary containing layout metadata
+        """
+        if not self._page:
+            return {}
+
+        try:
+            layout_data = self._page.evaluate("""
+                () => {
+                    const elements = [];
+                    const allElements = document.querySelectorAll('*');
+                    
+                    for (const el of allElements) {
+                        try {
+                            const rect = el.getBoundingClientRect();
+                            const computedStyle = window.getComputedStyle(el);
+                            
+                            // Skip elements that are not visible or have no size
+                            if (rect.width === 0 && rect.height === 0 && 
+                                computedStyle.display === 'none') {
+                                continue;
+                            }
+                            
+                            // Capture key layout properties
+                            const elementData = {
+                                tag: el.tagName.toLowerCase(),
+                                id: el.id || null,
+                                className: el.className || null,
+                                boundingBox: {
+                                    x: Math.round(rect.x),
+                                    y: Math.round(rect.y),
+                                    width: Math.round(rect.width),
+                                    height: Math.round(rect.height),
+                                    top: Math.round(rect.top),
+                                    right: Math.round(rect.right),
+                                    bottom: Math.round(rect.bottom),
+                                    left: Math.round(rect.left)
+                                },
+                                computedStyle: {
+                                    display: computedStyle.display,
+                                    visibility: computedStyle.visibility,
+                                    position: computedStyle.position,
+                                    zIndex: computedStyle.zIndex,
+                                    opacity: computedStyle.opacity,
+                                    pointerEvents: computedStyle.pointerEvents,
+                                    cursor: computedStyle.cursor
+                                },
+                                text: el.textContent ? el.textContent.substring(0, 200) : null,
+                                isInteractive: el.tagName === 'BUTTON' || 
+                                             el.tagName === 'A' || 
+                                             el.tagName === 'INPUT' || 
+                                             el.tagName === 'SELECT' ||
+                                             el.tagName === 'TEXTAREA' ||
+                                             el.onclick !== null ||
+                                             el.getAttribute('role') === 'button' ||
+                                             el.getAttribute('role') === 'link' ||
+                                             computedStyle.cursor === 'pointer'
+                            };
+                            
+                            // Add element-specific attributes
+                            if (el.tagName === 'A') {
+                                elementData.href = el.href || null;
+                            }
+                            if (el.tagName === 'INPUT') {
+                                elementData.inputType = el.type || null;
+                                elementData.value = el.value || null;
+                            }
+                            if (el.tagName === 'BUTTON') {
+                                elementData.buttonType = el.type || null;
+                                elementData.disabled = el.disabled;
+                            }
+                            
+                            elements.push(elementData);
+                        } catch (e) {
+                            // Skip elements that cause errors
+                            continue;
+                        }
+                    }
+                    
+                    return {
+                        url: window.location.href,
+                        title: document.title,
+                        viewport: {
+                            width: window.innerWidth,
+                            height: window.innerHeight
+                        },
+                        timestamp: new Date().toISOString(),
+                        totalElements: elements.length,
+                        elements: elements
+                    };
+                }
+            """)
+            
+            return layout_data
+        except Exception as e:
+            logger.error(f"Failed to capture layout metadata: {e}", exc_info=True)
+            return {
+                "error": str(e),
+                "url": self._page.url if self._page else None,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
 
     def get_video_path(self) -> Optional[Path]:
         """
